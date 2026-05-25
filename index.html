@@ -1063,14 +1063,7 @@ select:focus{outline:none;border-color:#93c5fd;box-shadow:0 0 0 2px rgba(59,130,
         <div class="form-group">
           <label>Delegación Departamental *</label>
           <select id="arDepto">
-            <option value="">Seleccionar...</option>
-            <option>Alta Verapaz</option><option>Baja Verapaz</option><option>Chimaltenango</option>
-            <option>Chiquimula</option><option>El Progreso</option><option>Escuintla</option>
-            <option>Guatemala</option><option>Huehuetenango</option><option>Izabal</option>
-            <option>Jalapa</option><option>Jutiapa</option><option>Petén</option>
-            <option>Quetzaltenango</option><option>Quiché</option><option>Retalhuleu</option>
-            <option>Sacatepéquez</option><option>San Marcos</option><option>Santa Rosa</option>
-            <option>Sololá</option><option>Suchitepéquez</option><option>Totonicapán</option><option>Zacapa</option>
+            <option value="">Cargando delegaciones...</option>
           </select>
         </div>
         <div class="form-group">
@@ -1119,14 +1112,7 @@ select:focus{outline:none;border-color:#93c5fd;box-shadow:0 0 0 2px rgba(59,130,
         <div class="form-group">
           <label>Delegación Departamental *</label>
           <select id="euDepto">
-            <option value="">Seleccionar...</option>
-            <option>Alta Verapaz</option><option>Baja Verapaz</option><option>Chimaltenango</option>
-            <option>Chiquimula</option><option>El Progreso</option><option>Escuintla</option>
-            <option>Guatemala</option><option>Huehuetenango</option><option>Izabal</option>
-            <option>Jalapa</option><option>Jutiapa</option><option>Petén</option>
-            <option>Quetzaltenango</option><option>Quiché</option><option>Retalhuleu</option>
-            <option>Sacatepéquez</option><option>San Marcos</option><option>Santa Rosa</option>
-            <option>Sololá</option><option>Suchitepéquez</option><option>Totonicapán</option><option>Zacapa</option>
+            <option value="">Cargando delegaciones...</option>
           </select>
         </div>
         <div class="form-group">
@@ -1649,202 +1635,74 @@ function getMantRec(progId,month){
 // DASHBOARD
 // ============================================================
 function changeYear(d){dashYear+=d;renderDash();}
-
 function renderDash(){
-  var y=dashYear;
+  const y=dashYear;
   document.getElementById('dashYear').textContent=y;
   document.getElementById('dashYearNav').textContent=y;
-
-  // Mostrar estado de carga inmediatamente
-  document.getElementById('dashStats').innerHTML=
-    '<div style="grid-column:1/-1;text-align:center;padding:18px;color:var(--text-secondary);font-size:.9rem;">Cargando datos del panel...</div>';
-  document.getElementById('dashProgress').innerHTML='';
-  document.getElementById('dashPending').innerHTML='';
-
-  var bienes=bienesVisibles();  // todos los bienes del usuario
-
-  // Cargar programaciones y seguimientos del año en paralelo
-  // SIN filtrar por ningún bien específico — datos globales
-  Promise.all([
-    api('getProgramacion',{anio:y}),
-    api('getSeguimiento',{anio:y}),
-    api('getProgramacion',{anio:new Date().getFullYear()}),
-    api('getSeguimiento',{anio:new Date().getFullYear()})
-  ]).then(function(results){
-    var rProg=results[0];
-    var rSeg=results[1];
-    var rProgCur=results[2];
-    var rSegCur=results[3];
-
-    // Actualizar db.programaciones con datos frescos del año seleccionado
-    if(rProg.ok&&Array.isArray(rProg.data)){
-      // Fusionar: reemplazar las del año y conservar las de otros años
-      var otrosAnios=db.programaciones.filter(function(p){return parseInt(p.anio)!==y;});
-      var esteAnio=rProg.data.map(mapProgFromSheet);
-      db.programaciones=otrosAnios.concat(esteAnio);
-    }
-
-    // Construir dashMap: mapa independiente de seguimientos para el dashboard
-    // Clave: id_programacion + '_' + indice_mes  (igual que mantMap)
-    var dashMap={};
-    var dashCacheMap={};  // clave id_prog_mes-nombre para quickConfirm
-    if(rSeg.ok&&Array.isArray(rSeg.data)){
-      rSeg.data.forEach(function(s){
-        var mesIdx=MONTHS.indexOf(s.mes);
-        if(mesIdx>=0){
-          dashMap[s.id_programacion+'_'+mesIdx]={
-            id_seguimiento:s.id_seguimiento,
-            ejecutado:s.estado==='Ejecutado',
-            fecha:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
-            responsable:s.ejecutado_por||'',
-            obs:s.observaciones||''
-          };
-        }
-        dashCacheMap[s.id_programacion+'_'+s.mes]={
-          id_seguimiento:s.id_seguimiento,
-          estado:s.estado,
-          fecha_ejecucion:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
-          ejecutado_por:s.ejecutado_por||''
-        };
-      });
-    }
-    db.dashMap=dashMap;
-    db.dashCacheMap=dashCacheMap;
-
-    // dashMap para el año actual (pendientes)
-    var dashMapCur=dashMap; // mismo año si coincide
-    var dashCacheMapCur=dashCacheMap;
-    var curYear=new Date().getFullYear();
-    if(curYear!==y){
-      dashMapCur={};
-      dashCacheMapCur={};
-      if(rProgCur.ok&&Array.isArray(rProgCur.data)){
-        var progsAnioActual=rProgCur.data.map(mapProgFromSheet);
-        var otrosAnios2=db.programaciones.filter(function(p){return parseInt(p.anio)!==curYear;});
-        db.programaciones=otrosAnios2.concat(progsAnioActual);
-      }
-      if(rSegCur.ok&&Array.isArray(rSegCur.data)){
-        rSegCur.data.forEach(function(s){
-          var mesIdx=MONTHS.indexOf(s.mes);
-          if(mesIdx>=0){
-            dashMapCur[s.id_programacion+'_'+mesIdx]={
-              id_seguimiento:s.id_seguimiento,
-              ejecutado:s.estado==='Ejecutado',
-              fecha:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
-              responsable:s.ejecutado_por||'',
-              obs:s.observaciones||''
-            };
-          }
-          dashCacheMapCur[s.id_programacion+'_'+s.mes]={
-            id_seguimiento:s.id_seguimiento,
-            estado:s.estado,
-            fecha_ejecucion:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
-            ejecutado_por:s.ejecutado_por||''
-          };
-        });
-      }
-    }
-
-    _renderDashUI(y,bienes,dashMap,dashMapCur,dashCacheMapCur);
-
-  }).catch(function(e){
-    console.error('[renderDash] Error cargando datos:', e);
-    // Fallback: usar datos en memoria si existen
-    _renderDashUI(y,bienes,db.dashMap||db.mantMap||{},db.dashMap||db.mantMap||{},db.dashCacheMap||db.seguimientoCache||{});
-  });
-}
-
-function _renderDashUI(y,bienes,dashMap,dashMapCur,dashCacheMapCur){
-  // Helper local: lee del dashMap propio del dashboard, nunca del mantMap de Seguimiento
-  function getDashRec(progId,month){
-    return dashMap[progId+'_'+month]||{};
-  }
-  function getDashRecCur(progId,month){
-    return dashMapCur[progId+'_'+month]||{};
-  }
-
-  // ── KPIs ──
-  var totalProg=0,totalExec=0;
-  bienes.forEach(function(b){
-    progDeUnBien(b.id,y).forEach(function(pg){
-      (pg.months||[]).forEach(function(m){
+  const bienes=bienesVisibles();
+  let totalProg=0,totalExec=0;
+  bienes.forEach(b=>{
+    const progs=progDeUnBien(b.id,y);
+    progs.forEach(pg=>{
+      (pg.months||[]).forEach(m=>{
         totalProg++;
-        if(getDashRec(pg.id,m).ejecutado) totalExec++;
+        if(getMantRec(pg.id,m).ejecutado) totalExec++;
       });
     });
   });
-  var pct=totalProg>0?Math.round((totalExec/totalProg)*100):0;
-
-  document.getElementById('dashStats').innerHTML=
-    '<div class="kpi-card kpi-blue"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div><div class="kpi-val">'+bienes.length+'</div><div class="kpi-lbl">Bienes Registrados</div></div>'+
-    '<div class="kpi-card kpi-green"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div><div class="kpi-val">'+totalProg+'</div><div class="kpi-lbl">Programados</div></div>'+
-    '<div class="kpi-card kpi-orange"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></div><div class="kpi-val">'+totalExec+'</div><div class="kpi-lbl">Ejecutados</div></div>'+
-    '<div class="kpi-card '+(pct>=80?'kpi-violet':pct>=50?'kpi-orange':'kpi-blue')+'"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div><div class="kpi-val">'+pct+'%</div><div class="kpi-lbl">Eficiencia Global</div></div>';
-
-  // ── Barras de avance por bien ──
-  var html='';
-  bienes.forEach(function(b){
-    var progs=progDeUnBien(b.id,y);
-    var bp=0,be=0;
-    progs.forEach(function(pg){
-      (pg.months||[]).forEach(function(m){
-        bp++;
-        if(getDashRec(pg.id,m).ejecutado) be++;
-      });
-    });
+  const pct=totalProg>0?Math.round((totalExec/totalProg)*100):0;
+  document.getElementById('dashStats').innerHTML=`
+    <div class="kpi-card kpi-blue"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div><div class="kpi-val">${bienes.length}</div><div class="kpi-lbl">Bienes Registrados</div></div>
+    <div class="kpi-card kpi-green"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div><div class="kpi-val">${totalProg}</div><div class="kpi-lbl">Programados</div></div>
+    <div class="kpi-card kpi-orange"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></div><div class="kpi-val">${totalExec}</div><div class="kpi-lbl">Ejecutados</div></div>
+    <div class="kpi-card ${pct>=80?'kpi-violet':pct>=50?'kpi-orange':'kpi-blue'}"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div><div class="kpi-val">${pct}%</div><div class="kpi-lbl">Eficiencia Global</div></div>`;
+  let html='';
+  bienes.forEach(b=>{
+    const progs=progDeUnBien(b.id,y);
+    let bp=0,be=0;
+    progs.forEach(pg=>{(pg.months||[]).forEach(m=>{bp++;if(getMantRec(pg.id,m).ejecutado)be++;});});
     if(bp===0) return;
-    var p=Math.round((be/bp)*100);
-    var cls=p>=80?'good':p>=50?'warn':'low';
-    html+='<div style="margin-bottom:14px;">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'+
-        '<span style="font-size:.85rem;font-weight:600;">'+b.codigo+' — '+b.tipo+'</span>'+
-        '<span class="pct-label">'+be+'/'+bp+' — '+p+'%</span>'+
-      '</div>'+
-      '<div class="progress-wrap"><div class="progress-bar '+cls+'" style="width:'+p+'%"></div></div>'+
-    '</div>';
+    const p=Math.round((be/bp)*100);
+    const cls=p>=80?'good':p>=50?'warn':'low';
+    html+=`<div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="font-size:.85rem;font-weight:600;">${b.codigo} — ${b.tipo}</span>
+        <span class="pct-label">${be}/${bp} — ${p}%</span>
+      </div>
+      <div class="progress-wrap"><div class="progress-bar ${cls}" style="width:${p}%"></div></div>
+    </div>`;
   });
-  document.getElementById('dashProgress').innerHTML=html||
-    '<div class="empty"><div class="empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#b0bec5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div><p>Sin datos de mantenimiento para este año.</p></div>';
-
-  // ── Pendientes del mes actual ──
-  var curMonth=new Date().getMonth();
-  var curYear=new Date().getFullYear();
-  var pending=[];
-  bienes.forEach(function(b){
-    progDeUnBien(b.id,curYear).forEach(function(pg){
-      if((pg.months||[]).indexOf(curMonth)>=0){
-        if(!getDashRecCur(pg.id,curMonth).ejecutado) pending.push({b:b,pg:pg,m:curMonth});
+  document.getElementById('dashProgress').innerHTML=html||'<div class="empty"><div class="empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#b0bec5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div><p>Sin datos de mantenimiento para este año.</p></div>';
+  // Pendientes mes actual
+  const curMonth=new Date().getMonth();
+  const curYear=new Date().getFullYear();
+  let pending=[];
+  bienes.forEach(b=>{
+    const progs=progDeUnBien(b.id,curYear);
+    progs.forEach(pg=>{
+      if((pg.months||[]).includes(curMonth)){
+        if(!getMantRec(pg.id,curMonth).ejecutado) pending.push({b,pg,m:curMonth});
       }
     });
   });
-  var ph=curYear!==y?'<div class="alert alert-info">Pendientes del año actual ('+curYear+').</div>':'';
-  if(pending.length===0){
-    ph+='<div class="empty"><div class="empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div><p>¡Sin pendientes en '+MONTHS[curMonth]+'!</p></div>';
-  } else {
-    ph+='<div class="alert alert-warning">Hay '+pending.length+' mantenimiento(s) sin confirmar en '+MONTHS[curMonth]+' '+curYear+'.</div>';
-    pending.forEach(function(item){
-      ph+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">'+
-        '<span style="font-size:.85rem;font-weight:600;">'+item.b.codigo+' — '+item.b.marca+
-          ' <span style="color:var(--text-secondary);font-weight:400;">('+item.pg.tipoMant+')</span></span>'+
-        '<button class="btn btn-success btn-sm" onclick="quickConfirm(\''+item.pg.id+'\',' + item.m + ')">Confirmar</button>'+
-      '</div>';
+  let ph=curYear!==y?`<div class="alert alert-info">Pendientes del año actual (${curYear}).</div>`:'';
+  if(pending.length===0){ph+=`<div class="empty"><div class="empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div><p>¡Sin pendientes en ${MONTHS[curMonth]}!</p></div>`;}
+  else{
+    ph+=`<div class="alert alert-warning">Hay ${pending.length} mantenimiento(s) sin confirmar en ${MONTHS[curMonth]} ${curYear}.</div>`;
+    pending.forEach(({b,pg,m})=>{
+      ph+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:.85rem;font-weight:600;">${b.codigo} — ${b.marca} <span style="color:var(--text-secondary);font-weight:400;">(${pg.tipoMant})</span></span>
+        <button class="btn btn-success btn-sm" onclick="quickConfirm('${pg.id}',${m})">Confirmar</button>
+      </div>`;
     });
   }
   document.getElementById('dashPending').innerHTML=ph;
 }
-
 function quickConfirm(progId,month){
-  var pg=db.programaciones.find(function(p){return p.id===progId;});
+  const pg=db.programaciones.find(p=>p.id===progId);
   if(!pg){showToast('⚠️ Programación no encontrada');return;}
-  var b=db.bienes.find(function(x){return x.id===pg.bienId;});
-
-  // Verificar existencia en dashCacheMap para no crear duplicados
-  var cacheKey=progId+'_'+MONTHS[month];
-  var cached=(db.dashCacheMap&&db.dashCacheMap[cacheKey])||null;
-  var idExistente=cached?cached.id_seguimiento:'';
-
-  var seg={
-    id_seguimiento:idExistente,
+  const b=db.bienes.find(x=>x.id===pg.bienId);
+  const seg={
     id_programacion:progId,
     id_bien:pg.bienId,
     codigo_bien:b?b.codigo:'',
@@ -1860,25 +1718,9 @@ function quickConfirm(progId,month){
   api('saveSeguimiento',{seguimiento:seg,usuario:currentUser.username}).then(function(r){
     hideSpinner();
     if(!r.ok){apiErr(r.error||'Error al guardar');return;}
-    // Actualizar dashMap y dashCacheMap en memoria
-    var idDefinitivo=idExistente||(r.id||'');
-    if(!db.dashMap) db.dashMap={};
-    db.dashMap[progId+'_'+month]={
-      id_seguimiento:idDefinitivo,
-      ejecutado:true,
-      fecha:seg.fecha_ejecucion,
-      responsable:currentUser.username,
-      obs:''
-    };
-    if(!db.dashCacheMap) db.dashCacheMap={};
-    db.dashCacheMap[cacheKey]={
-      id_seguimiento:idDefinitivo,
-      estado:'Ejecutado',
-      fecha_ejecucion:seg.fecha_ejecucion,
-      ejecutado_por:currentUser.username
-    };
-    showToast('✔ Mantenimiento confirmado');
-    renderDash();
+    if(!db.mantMap) db.mantMap={};
+    db.mantMap[progId+'_'+month]={ejecutado:true,fecha:seg.fecha_ejecucion,responsable:currentUser.username,obs:''};
+    renderDash();showToast('✔ Mantenimiento confirmado');
   }).catch(function(){hideSpinner();apiErr();});
 }
 
@@ -2303,47 +2145,22 @@ function renderMantSelects(){
   renderMant();
 }
 function renderMant(){
-  var bienId=document.getElementById('mantBienSel').value;
-  var year=parseInt(document.getElementById('mantYearSel').value);
-  var filtro=document.getElementById('mantFiltro').value;
-  var cont=document.getElementById('mantContent');
+  const bienId=document.getElementById('mantBienSel').value;
+  const year=parseInt(document.getElementById('mantYearSel').value);
+  const filtro=document.getElementById('mantFiltro').value;
+  const cont=document.getElementById('mantContent');
   if(!bienId){cont.innerHTML='<div class="alert alert-info">Seleccione un bien para ver su seguimiento.</div>';return;}
   cont.innerHTML='<div style="text-align:center;padding:24px;color:var(--text-secondary);"><em>Cargando seguimiento...</em></div>';
   api('getSeguimiento',{id_bien:bienId,anio:year}).then(function(r){
-    // Construir cache con clave id_programacion_mes para lookup O(1)
-    // Esta es la fuente de verdad para saber si un registro ya existe en Sheets
-    db.seguimientoCache={};
-    db.mantMap={};
-    if(r.ok&&Array.isArray(r.data)){
-      r.data.forEach(function(s){
-        // Clave: id_programacion + '_' + mes (nombre del mes en español)
-        var cacheKey=s.id_programacion+'_'+s.mes;
-        db.seguimientoCache[cacheKey]={
-          id_seguimiento:s.id_seguimiento,
-          estado:s.estado,
-          fecha_ejecucion:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
-          ejecutado_por:s.ejecutado_por||'',
-          observaciones:s.observaciones||''
-        };
-        // También construir mantMap (índice numérico) para el render UI
-        var mesIdx=MONTHS.indexOf(s.mes);
-        if(mesIdx>=0){
-          var mapKey=s.id_programacion+'_'+mesIdx;
-          db.mantMap[mapKey]={
-            id_seguimiento:s.id_seguimiento,
-            ejecutado:s.estado==='Ejecutado',
-            fecha:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
-            responsable:s.ejecutado_por||'',
-            obs:s.observaciones||''
-          };
-        }
-      });
+    if(r.ok && Array.isArray(r.data)){
+      db.mantMap=buildSeguimientoMap(r.data);
+      // Guardar raw para desmarcar
+      db.seguimientoRaw=r.data;
+    } else {
+      db.mantMap={};db.seguimientoRaw=[];
     }
     _renderMantUI(bienId,year,filtro,cont);
-  }).catch(function(){
-    db.seguimientoCache={};db.mantMap={};
-    _renderMantUI(bienId,year,filtro,cont);
-  });
+  }).catch(function(){db.mantMap={};db.seguimientoRaw=[];_renderMantUI(bienId,year,filtro,cont);});
 }
 function _renderMantUI(bienId,year,filtro,cont){
   const b=db.bienes.find(x=>x.id===bienId);
@@ -2408,20 +2225,26 @@ function _renderMantUI(bienId,year,filtro,cont){
   cont.innerHTML=html;
 }
 function toggleMant(progId,month,done,bienId,anio){
-  var b=db.bienes.find(function(x){return x.id===bienId;});
-  var mapKey=progId+'_'+month;
-  var cacheKey=progId+'_'+MONTHS[month];  // clave del seguimientoCache
-  var rec=(db.mantMap&&db.mantMap[mapKey])||{};
-  var obsActual=rec.obs||'';
+  const b=db.bienes.find(x=>x.id===bienId);
+  const key=progId+'_'+month;
+  const rec=(db.mantMap&&db.mantMap[key])||{};
+  const obsActual=rec.obs||'';
 
-  // Verificar existencia usando seguimientoCache (cargado al abrir sección)
-  var cached=(db.seguimientoCache&&db.seguimientoCache[cacheKey])||null;
-  var idExistente=cached?cached.id_seguimiento:'';
+  // Buscar registro existente en Sheets por id_programacion + mes + anio
+  // para obtener el id_seguimiento y ACTUALIZAR en lugar de crear duplicado
+  var registroExistente=null;
+  if(db.seguimientoRaw&&Array.isArray(db.seguimientoRaw)){
+    registroExistente=db.seguimientoRaw.find(function(s){
+      return s.id_programacion===progId
+          && s.mes===MONTHS[month]
+          && String(s.anio)===String(anio);
+    })||null;
+  }
 
-  var fechaHoy=new Date().toISOString().split('T')[0]; // AAAA-MM-DD siempre
+  var fechaHoy=new Date().toISOString().split('T')[0]; // siempre AAAA-MM-DD
 
   var seg={
-    id_seguimiento:idExistente,           // con valor = actualiza; vacío = crea nuevo
+    id_seguimiento:registroExistente?registroExistente.id_seguimiento:'', // vacio = crear nuevo
     id_programacion:progId,
     id_bien:bienId,
     codigo_bien:b?b.codigo:'',
@@ -2438,54 +2261,69 @@ function toggleMant(progId,month,done,bienId,anio){
   api('saveSeguimiento',{seguimiento:seg,usuario:currentUser.username}).then(function(r){
     hideSpinner();
     if(!r.ok){apiErr(r.error||'Error al guardar');return;}
-
-    // Actualizar cache con el id_seguimiento definitivo
-    // Si era nuevo, la API devuelve r.id con el id asignado
-    var idDefinitivo=idExistente||(r.id||'');
-    if(!db.seguimientoCache) db.seguimientoCache={};
-    db.seguimientoCache[cacheKey]={
-      id_seguimiento:idDefinitivo,
-      estado:seg.estado,
-      fecha_ejecucion:seg.fecha_ejecucion,
-      ejecutado_por:seg.ejecutado_por,
-      observaciones:obsActual
-    };
     if(!db.mantMap) db.mantMap={};
-    db.mantMap[mapKey]={
-      id_seguimiento:idDefinitivo,
+    db.mantMap[key]={
+      id_seguimiento:registroExistente?registroExistente.id_seguimiento:(r.id||''),
       ejecutado:done,
       fecha:seg.fecha_ejecucion,
       responsable:seg.ejecutado_por,
       obs:obsActual
     };
-
-    showToast(done?'✔ Mantenimiento confirmado':'↩ Mantenimiento desmarcado');
+    // Actualizar seguimientoRaw en memoria para que la proxima operacion
+    // encuentre el id_seguimiento correcto sin necesidad de recargar
+    if(!db.seguimientoRaw) db.seguimientoRaw=[];
+    if(registroExistente){
+      registroExistente.estado=seg.estado;
+      registroExistente.fecha_ejecucion=seg.fecha_ejecucion;
+      registroExistente.ejecutado_por=seg.ejecutado_por;
+    } else {
+      db.seguimientoRaw.push({
+        id_seguimiento:r.id||'',
+        id_programacion:progId,
+        id_bien:bienId,
+        mes:MONTHS[month],
+        anio:anio||new Date().getFullYear(),
+        estado:seg.estado,
+        fecha_ejecucion:seg.fecha_ejecucion,
+        ejecutado_por:seg.ejecutado_por,
+        observaciones:obsActual,
+        delegacion:seg.delegacion
+      });
+    }
+    showToast(done?'\u2714 Mantenimiento confirmado':'\u21a9 Mantenimiento desmarcado');
     renderMant();renderDash();
   }).catch(function(){hideSpinner();apiErr();});
 }
 function saveObs(progId,month,bienId,anio){
-  var el=document.getElementById('obs_'+progId+'_'+month);
+  const el=document.getElementById('obs_'+progId+'_'+month);
   if(!el) return;
-  var val=el.value;
-  var b=db.bienes.find(function(x){return x.id===bienId;});
-  var mapKey=progId+'_'+month;
-  var cacheKey=progId+'_'+MONTHS[month];  // clave del seguimientoCache
-  var rec=(db.mantMap&&db.mantMap[mapKey])||{};
+  const val=el.value;
+  const b=db.bienes.find(x=>x.id===bienId);
+  const key=progId+'_'+month;
+  const rec=(db.mantMap&&db.mantMap[key])||{};
 
-  // Verificar existencia usando seguimientoCache
-  var cached=(db.seguimientoCache&&db.seguimientoCache[cacheKey])||null;
-  var idExistente=cached?cached.id_seguimiento:'';
+  // Buscar registro existente para obtener id_seguimiento y NO crear duplicado
+  var registroExistente=null;
+  if(db.seguimientoRaw&&Array.isArray(db.seguimientoRaw)){
+    registroExistente=db.seguimientoRaw.find(function(s){
+      return s.id_programacion===progId
+          && s.mes===MONTHS[month]
+          && String(s.anio)===String(anio);
+    })||null;
+  }
 
-  // Preservar fecha ya guardada, normalizada a AAAA-MM-DD
+  // Fecha: usar la ya guardada en el registro existente (ya en AAAA-MM-DD),
+  // o la del mantMap. Nunca generar fecha nueva si el estado no cambia.
   var fechaExistente='';
-  if(cached&&cached.fecha_ejecucion){
-    fechaExistente=String(cached.fecha_ejecucion).split('T')[0];
+  if(registroExistente&&registroExistente.fecha_ejecucion){
+    // Normalizar por si vino con formato ISO completo de un registro previo
+    fechaExistente=String(registroExistente.fecha_ejecucion).split('T')[0];
   } else if(rec.fecha){
     fechaExistente=String(rec.fecha).split('T')[0];
   }
 
   var seg={
-    id_seguimiento:idExistente,           // con valor = actualiza; vacío = crea nuevo
+    id_seguimiento:registroExistente?registroExistente.id_seguimiento:'',
     id_programacion:progId,
     id_bien:bienId,
     codigo_bien:b?b.codigo:'',
@@ -2493,37 +2331,38 @@ function saveObs(progId,month,bienId,anio){
     anio:anio||new Date().getFullYear(),
     estado:rec.ejecutado?'Ejecutado':'Pendiente',
     fecha_ejecucion:fechaExistente,
-    ejecutado_por:cached?cached.ejecutado_por:(rec.responsable||''),
+    ejecutado_por:rec.responsable||'',
     observaciones:val,
     delegacion:currentUser.delegacion||''
   };
 
   api('saveSeguimiento',{seguimiento:seg,usuario:currentUser.username}).then(function(r){
     if(!r.ok){return;}
-    // Actualizar cache
-    var idDefinitivo=idExistente||(r.id||'');
-    if(!db.seguimientoCache) db.seguimientoCache={};
-    db.seguimientoCache[cacheKey]={
-      id_seguimiento:idDefinitivo,
-      estado:seg.estado,
-      fecha_ejecucion:seg.fecha_ejecucion,
-      ejecutado_por:seg.ejecutado_por,
-      observaciones:val
-    };
     if(!db.mantMap) db.mantMap={};
-    if(!db.mantMap[mapKey]) db.mantMap[mapKey]={ejecutado:false};
-    db.mantMap[mapKey].obs=val;
-    db.mantMap[mapKey].id_seguimiento=idDefinitivo;
-
-    var el2=document.getElementById('obs_'+progId+'_'+month);
-    if(el2) el2.style.borderColor='var(--success)';
-    var ind=document.getElementById('obs_ind_'+progId+'_'+month);
-    if(ind){ind.textContent='✔ Guardado';ind.style.color='var(--success)';ind.style.opacity='1';}
-    setTimeout(function(){
-      var el3=document.getElementById('obs_'+progId+'_'+month);
-      if(el3) el3.style.borderColor='';
-      if(ind) ind.style.opacity='0';
-    },2000);
+    if(!db.mantMap[key]) db.mantMap[key]={ejecutado:false};
+    db.mantMap[key].obs=val;
+    // Actualizar seguimientoRaw en memoria
+    if(registroExistente){
+      registroExistente.observaciones=val;
+    } else if(r.id){
+      if(!db.seguimientoRaw) db.seguimientoRaw=[];
+      db.seguimientoRaw.push({
+        id_seguimiento:r.id,
+        id_programacion:progId,
+        id_bien:bienId,
+        mes:MONTHS[month],
+        anio:anio||new Date().getFullYear(),
+        estado:seg.estado,
+        fecha_ejecucion:seg.fecha_ejecucion,
+        ejecutado_por:seg.ejecutado_por,
+        observaciones:val,
+        delegacion:seg.delegacion
+      });
+    }
+    el.style.borderColor='var(--success)';
+    const ind=document.getElementById('obs_ind_'+progId+'_'+month);
+    if(ind){ind.textContent='\u2714 Guardado';ind.style.color='var(--success)';ind.style.opacity='1';}
+    setTimeout(function(){el.style.borderColor='';if(ind){ind.style.opacity='0';}},2000);
   }).catch(function(){});
 }
 
@@ -2531,330 +2370,279 @@ function saveObs(progId,month,bienId,anio){
 // REPORTE — con filtros, dashboard y PDF
 // ============================================================
 function poblarFiltrosReport(){
-  var selR=document.getElementById('reportRenglon');
-  var curR=selR.value;
-  var renglones=[...new Set(bienesVisibles().map(function(b){return b.renglon;}).filter(function(r){return r&&r.trim();}))].sort();
-  selR.innerHTML='<option value="">Todos</option>'+renglones.map(function(r){return '<option value="'+r+'">'+r+'</option>';}).join('');
+  // Renglones únicos
+  const selR=document.getElementById('reportRenglon');
+  const curR=selR.value;
+  const renglones=[...new Set(bienesVisibles().map(b=>b.renglon).filter(r=>r&&r.trim()))].sort();
+  selR.innerHTML='<option value="">Todos</option>'+renglones.map(r=>`<option value="${r}">${r}</option>`).join('');
   if(curR) selR.value=curR;
-  var depWrap=document.getElementById('reportDeptoWrap');
+  // Delegaciones (solo admin)
+  const depWrap=document.getElementById('reportDeptoWrap');
   if(currentUser&&currentUser.rol==='admin'){
     depWrap.style.display='block';
-    var selD=document.getElementById('reportDepto');
-    var curD=selD.value;
-    var deptos=[...new Set(db.bienes.map(function(b){return b.delegacion;}).filter(function(d){return d;}))].sort();
-    selD.innerHTML='<option value="">Todas</option>'+deptos.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('');
+    const selD=document.getElementById('reportDepto');
+    const curD=selD.value;
+    const deptos=[...new Set(db.bienes.map(b=>b.delegacion).filter(d=>d))].sort();
+    selD.innerHTML='<option value="">Todas</option>'+deptos.map(d=>`<option value="${d}">${d}</option>`).join('');
     if(curD) selD.value=curD;
   } else {
     depWrap.style.display='none';
   }
 }
 function limpiarFiltrosReport(){
-  ['reportMes','reportClasif','reportRenglon','reportDepto'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.value='';
+  ['reportMes','reportClasif','reportRenglon','reportDepto'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
   });
   renderReport();
 }
 function renderReport(){
   poblarFiltrosReport();
-  var year=parseInt(document.getElementById('reportYear').value);
-  var filtroMes=document.getElementById('reportMes').value;
-  var filtroClasif=document.getElementById('reportClasif').value;
-  var filtroRenglon=document.getElementById('reportRenglon').value;
-  var filtroDeptoEl=document.getElementById('reportDepto');
-  var filtroDepto=filtroDeptoEl?filtroDeptoEl.value:'';
-  var mesNum=filtroMes!==''?parseInt(filtroMes):null;
-  var cont=document.getElementById('reportContent');
+  const year=parseInt(document.getElementById('reportYear').value);
+  const filtroMes=document.getElementById('reportMes').value;
+  const filtroClasif=document.getElementById('reportClasif').value;
+  const filtroRenglon=document.getElementById('reportRenglon').value;
+  const filtroDepto=document.getElementById('reportDepto')?document.getElementById('reportDepto').value:'';
+  const mesNum=filtroMes!==''?parseInt(filtroMes):null;
+  const cont=document.getElementById('reportContent');
 
-  // Estado de carga inmediato
-  cont.innerHTML='<div style="text-align:center;padding:28px;color:var(--text-secondary);font-size:.9rem;">Cargando reporte...</div>';
+  // Filtrar bienes
+  let bienes=bienesVisibles();
+  if(filtroClasif) bienes=bienes.filter(b=>b.clasificacion===filtroClasif);
+  if(filtroRenglon) bienes=bienes.filter(b=>b.renglon===filtroRenglon);
+  if(filtroDepto) bienes=bienes.filter(b=>b.delegacion===filtroDepto);
 
-  // Cargar programaciones y seguimientos del año SIN filtrar por bien
-  Promise.all([
-    api('getProgramacion',{anio:year}),
-    api('getSeguimiento',{anio:year})
-  ]).then(function(results){
-    var rProg=results[0];
-    var rSeg=results[1];
-
-    // Actualizar programaciones en memoria para este año
-    if(rProg.ok&&Array.isArray(rProg.data)){
-      var otrosAnios=db.programaciones.filter(function(p){return parseInt(p.anio)!==year;});
-      db.programaciones=otrosAnios.concat(rProg.data.map(mapProgFromSheet));
-    }
-
-    // Construir reportMap independiente — clave: id_programacion + '_' + mes_idx
-    var reportMap={};
-    if(rSeg.ok&&Array.isArray(rSeg.data)){
-      rSeg.data.forEach(function(s){
-        var mesIdx=MONTHS.indexOf(s.mes);
-        if(mesIdx>=0){
-          reportMap[s.id_programacion+'_'+mesIdx]={
-            ejecutado:s.estado==='Ejecutado',
-            fecha:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
-            responsable:s.ejecutado_por||'',
-            obs:s.observaciones||''
-          };
-        }
-      });
-    }
-
-    _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,mesNum,cont,reportMap);
-
-  }).catch(function(e){
-    console.error('[renderReport] Error cargando datos:', e);
-    // Fallback: usar mantMap o dashMap si existen
-    var fallback=db.reportMap||db.dashMap||db.mantMap||{};
-    _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,mesNum,cont,fallback);
-  });
-}
-
-function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,mesNum,cont,reportMap){
-  // Helper local — nunca toca getMantRec ni db.mantMap
-  function getRepRec(progId,month){
-    return reportMap[progId+'_'+month]||{};
-  }
-
-  // Filtrar bienes según filtros del Reporte (nunca por bien de Seguimiento)
-  var bienes=bienesVisibles();
-  if(filtroClasif) bienes=bienes.filter(function(b){return b.clasificacion===filtroClasif;});
-  if(filtroRenglon) bienes=bienes.filter(function(b){return b.renglon===filtroRenglon;});
-  if(filtroDepto)  bienes=bienes.filter(function(b){return b.delegacion===filtroDepto;});
-
-  if(bienes.length===0){
-    cont.innerHTML='<div class="empty"><div class="empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#b0bec5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" x2="15" y1="7" y2="7"/><line x1="9" x2="15" y1="11" y2="11"/><line x1="9" x2="12" y1="15" y2="15"/></svg></div><p>No hay datos con los filtros seleccionados.</p></div>';
-    return;
-  }
+  if(bienes.length===0){cont.innerHTML='<div class="empty"><div class="empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#b0bec5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" x2="15" y1="7" y2="7"/><line x1="9" x2="15" y1="11" y2="11"/><line x1="9" x2="12" y1="15" y2="15"/></svg></div><p>No hay datos con los filtros seleccionados.</p></div>';return;}
 
   // Acumular datos globales
-  var totalProg=0,totalExec=0,totalCosto=0,totalEjec=0;
-  var byMonth=Array.from({length:12},function(){return {prog:0,exec:0};});
-  var rows='',obsRows='';
-  var semData=[];
+  let totalProg=0,totalExec=0,totalCosto=0,totalEjec=0;
+  // Datos por mes para gráfico de barras
+  const byMonth=Array.from({length:12},()=>({prog:0,exec:0}));
+  let rows='',obsRows='';
+  let semData=[];
 
-  bienes.forEach(function(b){
-    var progs=progDeUnBien(b.id,year);
-    var bp=0,be=0,bc=0,bej=0;
-    progs.forEach(function(pg){
-      var meses=pg.months||[];
-      if(mesNum!==null) meses=meses.filter(function(m){return m===mesNum;});
-      meses.forEach(function(m){
+  bienes.forEach(b=>{
+    const progs=progDeUnBien(b.id,year);
+    let bp=0,be=0,bc=0,bej=0;
+    progs.forEach(pg=>{
+      let meses=pg.months||[];
+      if(mesNum!==null) meses=meses.filter(m=>m===mesNum);
+      meses.forEach(m=>{
         bp++;bc+=(pg.costo||0);
         byMonth[m].prog++;
-        var rec=getRepRec(pg.id,m);
+        const rec=getMantRec(pg.id,m);
         if(rec.ejecutado){be++;bej+=(pg.costo||0);byMonth[m].exec++;}
         if(rec.obs&&rec.obs.trim()){
-          obsRows+='<tr>'+
-            '<td><span class="badge badge-blue" style="font-family:var(--mono)">'+b.codigo+'</span></td>'+
-            '<td>'+pg.tipoMant+'</td><td>'+MONTHS[m]+'</td>'+
-            '<td>'+(rec.ejecutado?'<span class="badge badge-green">Ejecutado</span>':'<span class="badge badge-orange">\u23f3 Pendiente</span>')+'</td>'+
-            '<td style="font-size:.82rem;">'+rec.obs+'</td>'+
-          '</tr>';
+          obsRows+=`<tr>
+            <td><span class="badge badge-blue" style="font-family:var(--mono)">${b.codigo}</span></td>
+            <td>${pg.tipoMant}</td><td>${MONTHS[m]}</td>
+            <td>${rec.ejecutado?'<span class="badge badge-green">Ejecutado</span>':'<span class="badge badge-orange">⏳ Pendiente</span>'}</td>
+            <td style="font-size:.82rem;">${rec.obs}</td>
+          </tr>`;
         }
       });
     });
     totalProg+=bp;totalExec+=be;totalCosto+=bc;totalEjec+=bej;
     if(bp===0) return;
-    var pct=Math.round((be/bp)*100);
-    var badge=pct>=80?'badge-green':pct>=50?'badge-gold':'badge-red';
-    semData.push({codigo:b.codigo,tipo:b.tipo,marca:b.marca,pct:pct,bp:bp,be:be,bc:bc,bej:bej,badge:badge,clasif:b.clasificacion||'',depto:b.delegacion||''});
-    rows+='<tr>'+
-      '<td><span class="badge badge-blue" style="font-family:var(--mono)">'+b.codigo+'</span></td>'+
-      '<td>'+b.tipo+'</td><td>'+b.marca+'</td>'+
-      (currentUser.rol==='admin'?'<td>'+(b.delegacion||'\u2014')+'</td>':'')+
-      '<td>'+(b.clasificacion?'<span class="badge '+({'Equipo Cr\u00edtico':'badge-red','Alto Valor':'badge-gold','Equipo Sensible':'badge-orange'}[b.clasificacion]||'badge-gray')+'">'+b.clasificacion+'</span>':'\u2014')+'</td>'+
-      '<td>'+bp+'</td><td>'+be+'</td>'+
-      '<td><span class="badge '+badge+'">'+pct+'%</span></td>'+
-      '<td>Q '+bc.toLocaleString()+'</td><td>Q '+bej.toLocaleString()+'</td>'+
-    '</tr>';
+    const pct=Math.round((be/bp)*100);
+    const badge=pct>=80?'badge-green':pct>=50?'badge-gold':'badge-red';
+    semData.push({codigo:b.codigo,tipo:b.tipo,marca:b.marca,pct,bp,be,bc,bej,badge,clasif:b.clasificacion||'',depto:b.delegacion||''});
+    rows+=`<tr>
+      <td><span class="badge badge-blue" style="font-family:var(--mono)">${b.codigo}</span></td>
+      <td>${b.tipo}</td><td>${b.marca}</td>
+      ${currentUser.rol==='admin'?`<td>${b.delegacion||'—'}</td>`:''}
+      <td>${b.clasificacion?`<span class="badge ${{'Equipo Crítico':'badge-red','Alto Valor':'badge-gold','Equipo Sensible':'badge-orange'}[b.clasificacion]||'badge-gray'}">${b.clasificacion}</span>`:'—'}</td>
+      <td>${bp}</td><td>${be}</td>
+      <td><span class="badge ${badge}">${pct}%</span></td>
+      <td>Q ${bc.toLocaleString()}</td><td>Q ${bej.toLocaleString()}</td>
+    </tr>`;
   });
 
-  var gp=totalProg>0?Math.round((totalExec/totalProg)*100):0;
-  var gpCls=gp>=80?'good':gp>=50?'warn':'low';
+  const gp=totalProg>0?Math.round((totalExec/totalProg)*100):0;
+  const gpCls=gp>=80?'good':gp>=50?'warn':'low';
 
   // ── Widget 1: Donut SVG ──
-  var r=48,cx=60,cy=60,circum=2*Math.PI*r;
-  var dashExec=totalProg>0?(totalExec/totalProg)*circum:0;
-  var donutColor=gp>=80?'#10b981':gp>=50?'#f59e0b':'#ef4444';
-  var donutSVG='<svg width="120" height="120" viewBox="0 0 120 120">'+
-    '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#E2EAF2" stroke-width="14"/>'+
-    '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+donutColor+'" stroke-width="14"'+
-      ' stroke-dasharray="'+dashExec+' '+circum+'" stroke-dashoffset="'+(circum*0.25)+'" stroke-linecap="round" transform="rotate(-90 '+cx+' '+cy+')"/>'+
-  '</svg>';
+  const r=48,cx=60,cy=60,circum=2*Math.PI*r;
+  const dashExec=totalProg>0?(totalExec/totalProg)*circum:0;
+  const donutColor=gp>=80?'#10b981':gp>=50?'#f59e0b':'#ef4444';
+  const donutSVG=`<svg width="120" height="120" viewBox="0 0 120 120">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E2EAF2" stroke-width="14"/>
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${donutColor}" stroke-width="14"
+      stroke-dasharray="${dashExec} ${circum}" stroke-dashoffset="${circum*0.25}" stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
+  </svg>`;
 
   // ── Widget 2: Barras por mes ──
-  var mesesConDatos=byMonth.map(function(d,i){return Object.assign({},d,{i:i});}).filter(function(d){return d.prog>0;});
-  var maxProg=Math.max.apply(null,mesesConDatos.map(function(d){return d.prog;}).concat([1]));
-  var barrasHTML='';
+  const mesesConDatos=byMonth.map((d,i)=>({...d,i})).filter(d=>d.prog>0);
+  const maxProg=Math.max(...mesesConDatos.map(d=>d.prog),1);
+  let barrasHTML='';
   if(mesNum!==null){
-    var dm=byMonth[mesNum];
-    var wExec=dm.prog>0?Math.round((dm.exec/dm.prog)*100):0;
-    barrasHTML='<div class="chart-bar-row">'+
-      '<span class="chart-bar-label" style="min-width:70px;">'+MONTHS[mesNum].substring(0,3)+'</span>'+
-      '<div class="chart-bar-track" style="height:22px;">'+
-        '<div class="chart-bar-prog" style="width:100%;"></div>'+
-        '<div class="chart-bar-exec" style="width:'+wExec+'%;"></div>'+
-      '</div>'+
-      '<span style="font-size:.78rem;min-width:60px;">'+dm.exec+'/'+dm.prog+' ('+wExec+'%)</span>'+
-    '</div>';
+    // Solo un mes — mostrar barra grande
+    const d=byMonth[mesNum];
+    const wExec=d.prog>0?Math.round((d.exec/d.prog)*100):0;
+    const bCls=wExec>=80?'':'wExec>=50?warn:low';
+    barrasHTML=`<div class="chart-bar-row">
+      <span class="chart-bar-label" style="min-width:70px;">${MONTHS[mesNum].substring(0,3)}</span>
+      <div class="chart-bar-track" style="height:22px;">
+        <div class="chart-bar-prog" style="width:100%;"></div>
+        <div class="chart-bar-exec" style="width:${wExec}%;"></div>
+      </div>
+      <span style="font-size:.78rem;min-width:60px;">${d.exec}/${d.prog} (${wExec}%)</span>
+    </div>`;
   } else {
-    mesesConDatos.forEach(function(d){
-      var wProg=Math.round((d.prog/maxProg)*100);
-      var wExecAbs=Math.round((d.exec/maxProg)*100);
-      var wExecPct=d.prog>0?Math.round((d.exec/d.prog)*100):0;
-      barrasHTML+='<div class="chart-bar-row">'+
-        '<span class="chart-bar-label">'+MONTHS[d.i].substring(0,3)+'</span>'+
-        '<div class="chart-bar-track">'+
-          '<div class="chart-bar-prog" style="width:'+wProg+'%;"></div>'+
-          '<div class="chart-bar-exec '+(wExecPct<80?wExecPct<50?'low':'warn':'')+'" style="width:'+wExecAbs+'%;"></div>'+
-        '</div>'+
-        '<span style="font-size:.75rem;min-width:52px;">'+d.exec+'/'+d.prog+'</span>'+
-      '</div>';
+    mesesConDatos.forEach(d=>{
+      const wProg=Math.round((d.prog/maxProg)*100);
+      const wExec=d.prog>0?Math.round((d.exec/d.prog)*100):0;
+      const eCls=wExec>=80?'':'wExec>=50?warn:low';
+      barrasHTML+=`<div class="chart-bar-row">
+        <span class="chart-bar-label">${MONTHS[d.i].substring(0,3)}</span>
+        <div class="chart-bar-track">
+          <div class="chart-bar-prog" style="width:${wProg}%;"></div>
+          <div class="chart-bar-exec ${wExec<80?wExec<50?'low':'warn':''}" style="width:${Math.round((d.exec/maxProg)*100)}%;"></div>
+        </div>
+        <span style="font-size:.75rem;min-width:52px;">${d.exec}/${d.prog}</span>
+      </div>`;
     });
   }
 
   // ── Widget 3: Semáforo ──
-  var semOrdenado=semData.slice().sort(function(a,b){return a.pct-b.pct;});
-  var semHTML=semOrdenado.map(function(s){
-    return '<div class="semaforo-row">'+
-      '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">'+
-        '<div class="semaforo-dot '+(s.pct>=80?'sem-green':s.pct>=50?'sem-yellow':'sem-red')+'"></div>'+
-        '<div style="min-width:0;">'+
-          '<div style="font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+s.codigo+' \u2014 '+s.marca+'</div>'+
-          '<div style="font-size:.72rem;color:var(--text-secondary);">'+s.tipo+'</div>'+
-        '</div>'+
-      '</div>'+
-      '<div style="text-align:right;flex-shrink:0;margin-left:8px;">'+
-        '<div style="font-size:.95rem;font-weight:700;color:'+(s.pct>=80?'var(--success)':s.pct>=50?'var(--warning)':'var(--danger)')+';">'+s.pct+'%</div>'+
-        '<div style="font-size:.72rem;color:var(--text-secondary);">'+s.be+'/'+s.bp+'</div>'+
-      '</div>'+
-    '</div>';
-  }).join('');
+  const semOrdenado=[...semData].sort((a,b)=>a.pct-b.pct);
+  const semHTML=semOrdenado.map(s=>`
+    <div class="semaforo-row">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+        <div class="semaforo-dot ${s.pct>=80?'sem-green':s.pct>=50?'sem-yellow':'sem-red'}"></div>
+        <div style="min-width:0;">
+          <div style="font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.codigo} — ${s.marca}</div>
+          <div style="font-size:.72rem;color:var(--text-secondary);">${s.tipo}</div>
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-left:8px;">
+        <div style="font-size:.95rem;font-weight:700;color:${s.pct>=80?'var(--success)':s.pct>=50?'var(--warning)':'var(--danger)'};">${s.pct}%</div>
+        <div style="font-size:.72rem;color:var(--text-secondary);">${s.be}/${s.bp}</div>
+      </div>
+    </div>`).join('');
 
   // ── Widget 4: Presupuesto ──
-  var costoPct=totalCosto>0?Math.round((totalEjec/totalCosto)*100):0;
-  var costoBar=costoPct>=80?'good':costoPct>=50?'warn':'low';
+  const costoPct=totalCosto>0?Math.round((totalEjec/totalCosto)*100):0;
+  const costoBar=costoPct>=80?'good':costoPct>=50?'warn':'low';
 
   // ── Etiqueta de filtros activos ──
-  var filtrosActivos=[];
+  const filtrosActivos=[];
   if(filtroMes!=='') filtrosActivos.push(MONTHS[mesNum]);
   if(filtroClasif) filtrosActivos.push(filtroClasif);
-  if(filtroRenglon) filtrosActivos.push('Rengl\u00f3n '+filtroRenglon);
+  if(filtroRenglon) filtrosActivos.push(`Renglón ${filtroRenglon}`);
   if(filtroDepto) filtrosActivos.push(filtroDepto);
-  var filtroTag=filtrosActivos.length?'<span style="font-size:.78rem;color:var(--accent);margin-left:8px;">Filtro: '+filtrosActivos.join(' \u00b7 ')+'</span>':'';
+  const filtroTag=filtrosActivos.length?`<span style="font-size:.78rem;color:var(--accent);margin-left:8px;">Filtro: ${filtrosActivos.join(' · ')}</span>`:'';
 
-  var adminDelegTD=currentUser.rol==='admin';
+  const adminDeleg=currentUser.rol==='admin'?'<th>Delegación</th>':'';
+  const adminDelegTD=currentUser.rol==='admin';
 
-  var conclusionCls=gp>=80?'alert-success':gp>=50?'alert-warning':'alert-info';
-  var conclusionTxt=gp>=80
-    ?'\u2705 <strong>Excelente ejecuci\u00f3n.</strong> Se complet\u00f3 el '+gp+'% de los mantenimientos programados.'
-    :gp>=50
-      ?'\u26a0\ufe0f <strong>Ejecuci\u00f3n parcial.</strong> Se complet\u00f3 el '+gp+'% del plan. Hay oportunidad de mejora.'
-      :'\u274c <strong>Ejecuci\u00f3n baja.</strong> Solo se complet\u00f3 el '+gp+'%. Se recomienda revisar el proceso.';
+  cont.innerHTML=`
+    <!-- STATS GLOBALES -->
+    <div class="stats-grid">
+      <div class="kpi-card kpi-blue"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div><div class="kpi-val">${totalProg}</div><div class="kpi-lbl">Programados</div></div>
+      <div class="kpi-card kpi-green"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></div><div class="kpi-val">${totalExec}</div><div class="kpi-lbl">Ejecutados</div></div>
+      <div class="kpi-card ${gp>=80?'kpi-violet':gp>=50?'kpi-orange':'kpi-blue'}"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div><div class="kpi-val">${gp}%</div><div class="kpi-lbl">Eficiencia</div></div>
+      <div class="kpi-card kpi-orange"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div><div class="kpi-val">${totalProg-totalExec}</div><div class="kpi-lbl">Pendientes</div></div>
+    </div>
 
-  var html=
-    '<!-- STATS GLOBALES -->'+
-    '<div class="stats-grid">'+
-      '<div class="kpi-card kpi-blue"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div><div class="kpi-val">'+totalProg+'</div><div class="kpi-lbl">Programados</div></div>'+
-      '<div class="kpi-card kpi-green"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></div><div class="kpi-val">'+totalExec+'</div><div class="kpi-lbl">Ejecutados</div></div>'+
-      '<div class="kpi-card '+(gp>=80?'kpi-violet':gp>=50?'kpi-orange':'kpi-blue')+'"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div><div class="kpi-val">'+gp+'%</div><div class="kpi-lbl">Eficiencia</div></div>'+
-      '<div class="kpi-card kpi-orange"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div><div class="kpi-val">'+(totalProg-totalExec)+'</div><div class="kpi-lbl">Pendientes</div></div>'+
-    '</div>'+
+    <!-- DASHBOARD ROW 1: Donut + Barras por mes -->
+    <div class="report-grid">
+      <div class="card">
+        <div class="card-title"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#1e40af\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><circle cx=\"12\" cy=\"12\" r=\"6\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/></svg> Eficiencia Global ${filtroTag}</div>
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+          <div class="donut-container">
+            ${donutSVG}
+            <div class="donut-center">
+              <div class="d-pct" style="color:${donutColor};">${gp}%</div>
+              <div class="d-lbl">eficiencia</div>
+            </div>
+          </div>
+          <div style="flex:1;min-width:120px;">
+            <div style="margin-bottom:8px;font-size:.85rem;"><span style="color:var(--text-secondary);">Ejecutados:</span> <strong style="color:var(--success);">${totalExec}</strong></div>
+            <div style="margin-bottom:8px;font-size:.85rem;"><span style="color:var(--text-secondary);">Pendientes:</span> <strong style="color:var(--warning);">${totalProg-totalExec}</strong></div>
+            <div style="font-size:.85rem;"><span style="color:var(--text-secondary);">Total programados:</span> <strong>${totalProg}</strong></div>
+          </div>
+        </div>
+        <div style="margin-top:14px;">
+          <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:4px;"><span>Avance</span><span>${totalExec}/${totalProg}</span></div>
+          <div class="progress-wrap" style="height:18px;"><div class="progress-bar ${gpCls}" style="width:${gp}%"></div></div>
+        </div>
+      </div>
 
-    '<!-- DASHBOARD ROW 1: Donut + Presupuesto -->'+
-    '<div class="report-grid">'+
-      '<div class="card">'+
-        '<div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> Eficiencia Global '+filtroTag+'</div>'+
-        '<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">'+
-          '<div class="donut-container">'+
-            donutSVG+
-            '<div class="donut-center">'+
-              '<div class="d-pct" style="color:'+donutColor+';">'+gp+'%</div>'+
-              '<div class="d-lbl">eficiencia</div>'+
-            '</div>'+
-          '</div>'+
-          '<div style="flex:1;min-width:120px;">'+
-            '<div style="margin-bottom:8px;font-size:.85rem;"><span style="color:var(--text-secondary);">Ejecutados:</span> <strong style="color:var(--success);">'+totalExec+'</strong></div>'+
-            '<div style="margin-bottom:8px;font-size:.85rem;"><span style="color:var(--text-secondary);">Pendientes:</span> <strong style="color:var(--warning);">'+(totalProg-totalExec)+'</strong></div>'+
-            '<div style="font-size:.85rem;"><span style="color:var(--text-secondary);">Total programados:</span> <strong>'+totalProg+'</strong></div>'+
-          '</div>'+
-        '</div>'+
-        '<div style="margin-top:14px;">'+
-          '<div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:4px;"><span>Avance</span><span>'+totalExec+'/'+totalProg+'</span></div>'+
-          '<div class="progress-wrap" style="height:18px;"><div class="progress-bar '+gpCls+'" style="width:'+gp+'%"></div></div>'+
-        '</div>'+
-      '</div>'+
+      <div class="card">
+        <div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg> Presupuesto vs Ejecución</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:.85rem;">
+          <div><span style="color:var(--text-secondary);">Presupuestado:</span><br><strong>Q ${totalCosto.toLocaleString()}</strong></div>
+          <div><span style="color:var(--text-secondary);">Ejecutado:</span><br><strong style="color:var(--success);">Q ${totalEjec.toLocaleString()}</strong></div>
+          <div><span style="color:var(--text-secondary);">Saldo:</span><br><strong style="color:var(--warning);">Q ${(totalCosto-totalEjec).toLocaleString()}</strong></div>
+        </div>
+        <div style="font-size:.8rem;margin-bottom:4px;display:flex;justify-content:space-between;"><span>Ejecución presupuestaria</span><span>${costoPct}%</span></div>
+        <div class="progress-wrap" style="height:18px;"><div class="progress-bar ${costoBar}" style="width:${costoPct}%"></div></div>
+        <div style="margin-top:12px;display:flex;gap:14px;font-size:.78rem;">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--teal);margin-right:4px;"></span>Ejecutado</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--border);margin-right:4px;"></span>Pendiente</span>
+        </div>
+      </div>
+    </div>
 
-      '<div class="card">'+
-        '<div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg> Presupuesto vs Ejecuci\u00f3n</div>'+
-        '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:.85rem;">'+
-          '<div><span style="color:var(--text-secondary);">Presupuestado:</span><br><strong>Q '+totalCosto.toLocaleString()+'</strong></div>'+
-          '<div><span style="color:var(--text-secondary);">Ejecutado:</span><br><strong style="color:var(--success);">Q '+totalEjec.toLocaleString()+'</strong></div>'+
-          '<div><span style="color:var(--text-secondary);">Saldo:</span><br><strong style="color:var(--warning);">Q '+(totalCosto-totalEjec).toLocaleString()+'</strong></div>'+
-        '</div>'+
-        '<div style="font-size:.8rem;margin-bottom:4px;display:flex;justify-content:space-between;"><span>Ejecuci\u00f3n presupuestaria</span><span>'+costoPct+'%</span></div>'+
-        '<div class="progress-wrap" style="height:18px;"><div class="progress-bar '+costoBar+'" style="width:'+costoPct+'%"></div></div>'+
-        '<div style="margin-top:12px;display:flex;gap:14px;font-size:.78rem;">'+
-          '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--teal);margin-right:4px;"></span>Ejecutado</span>'+
-          '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--border);margin-right:4px;"></span>Pendiente</span>'+
-        '</div>'+
-      '</div>'+
-    '</div>'+
+    <!-- DASHBOARD ROW 2: Barras mensuales + Semáforo -->
+    <div class="report-grid">
+      <div class="card">
+        <div class="card-title"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M8 2v4\"/><path d=\"M16 2v4\"/><rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\"/><path d=\"M3 10h18\"/></svg> Ejecución por Mes</div>
+        ${mesesConDatos.length===0
+          ?'<div class="empty" style="padding:20px;"><p>Sin datos de mantenimiento para este período.</p></div>'
+          :`<div class="chart-bar-wrap">${barrasHTML}</div>
+           <div style="margin-top:10px;display:flex;gap:14px;font-size:.75rem;">
+             <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--border);margin-right:4px;"></span>Programado</span>
+             <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--teal);margin-right:4px;"></span>Ejecutado</span>
+           </div>`}
+      </div>
 
-    '<!-- DASHBOARD ROW 2: Barras mensuales + Semáforo -->'+
-    '<div class="report-grid">'+
-      '<div class="card">'+
-        '<div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg> Ejecuci\u00f3n por Mes</div>'+
-        (mesesConDatos.length===0
-          ?'<div class="empty" style="padding:20px;"><p>Sin datos de mantenimiento para este per\u00edodo.</p></div>'
-          :'<div class="chart-bar-wrap">'+barrasHTML+'</div>'+
-           '<div style="margin-top:10px;display:flex;gap:14px;font-size:.75rem;">'+
-             '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--border);margin-right:4px;"></span>Programado</span>'+
-             '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--teal);margin-right:4px;"></span>Ejecutado</span>'+
-           '</div>')+
-      '</div>'+
+      <div class="card">
+        <div class="card-title"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"2\" width=\"6\" height=\"20\" rx=\"2\"/><circle cx=\"12\" cy=\"6\" r=\"1.5\" fill=\"#ef4444\" stroke=\"none\"/><circle cx=\"12\" cy=\"12\" r=\"1.5\" fill=\"#f59e0b\" stroke=\"none\"/><circle cx=\"12\" cy=\"18\" r=\"1.5\" fill=\"#10b981\" stroke=\"none\"/></svg> Semáforo por Bien</div>
+        <div style="margin-bottom:8px;display:flex;gap:12px;font-size:.75rem;">
+          <span><span class="semaforo-dot sem-green" style="display:inline-block;"></span> ≥80%</span>
+          <span><span class="semaforo-dot sem-yellow" style="display:inline-block;"></span> 50-79%</span>
+          <span><span class="semaforo-dot sem-red" style="display:inline-block;"></span> &lt;50%</span>
+        </div>
+        ${semData.length===0
+          ?'<div class="empty" style="padding:20px;"><p>Sin datos.</p></div>'
+          :semHTML}
+      </div>
+    </div>
 
-      '<div class="card">'+
-        '<div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="20" rx="2"/><circle cx="12" cy="6" r="1.5" fill="#ef4444" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="#f59e0b" stroke="none"/><circle cx="12" cy="18" r="1.5" fill="#10b981" stroke="none"/></svg> Sem\u00e1foro por Bien</div>'+
-        '<div style="margin-bottom:8px;display:flex;gap:12px;font-size:.75rem;">'+
-          '<span><span class="semaforo-dot sem-green" style="display:inline-block;"></span> \u226580%</span>'+
-          '<span><span class="semaforo-dot sem-yellow" style="display:inline-block;"></span> 50-79%</span>'+
-          '<span><span class="semaforo-dot sem-red" style="display:inline-block;"></span> &lt;50%</span>'+
-        '</div>'+
-        (semData.length===0?'<div class="empty" style="padding:20px;"><p>Sin datos.</p></div>':semHTML)+
-      '</div>'+
-    '</div>'+
+    <!-- TABLA DETALLE -->
+    <div class="card">
+      <div class="card-title"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18\"/></svg> Detalle por Bien</div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Código</th><th>Tipo</th><th>Marca</th>
+          ${adminDelegTD?'<th>Delegación</th>':''}
+          <th>Clasificación</th><th>Prog.</th><th>Ejec.</th><th>Efic.</th>
+          <th>Costo Prog.</th><th>Costo Ejec.</th>
+        </tr></thead>
+        <tbody>${rows||`<tr><td colspan="${adminDelegTD?10:9}" style="text-align:center;color:var(--text-secondary);">Sin programaciones para este período</td></tr>`}</tbody>
+      </table></div>
+    </div>
 
-    '<!-- TABLA DETALLE -->'+
-    '<div class="card">'+
-      '<div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg> Detalle por Bien</div>'+
-      '<div class="table-wrap"><table>'+
-        '<thead><tr>'+
-          '<th>C\u00f3digo</th><th>Tipo</th><th>Marca</th>'+
-          (adminDelegTD?'<th>Delegaci\u00f3n</th>':'')+
-          '<th>Clasificaci\u00f3n</th><th>Prog.</th><th>Ejec.</th><th>Efic.</th>'+
-          '<th>Costo Prog.</th><th>Costo Ejec.</th>'+
-        '</tr></thead>'+
-        '<tbody>'+(rows||'<tr><td colspan="'+(adminDelegTD?10:9)+'" style="text-align:center;color:var(--text-secondary);">Sin programaciones para este per\u00edodo</td></tr>')+'</tbody>'+
-      '</table></div>'+
-    '</div>'+
+    <!-- CONCLUSIÓN -->
+    <div class="card">
+      <div class="card-title"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z\"/></svg> Conclusión del Período ${year}${filtroTag}</div>
+      <div class="alert ${gp>=80?'alert-success':gp>=50?'alert-warning':'alert-info'}">
+        ${gp>=80?`✅ <strong>Excelente ejecución.</strong> Se completó el ${gp}% de los mantenimientos programados.`
+          :gp>=50?`⚠️ <strong>Ejecución parcial.</strong> Se completó el ${gp}% del plan. Hay oportunidad de mejora.`
+          :`❌ <strong>Ejecución baja.</strong> Solo se completó el ${gp}%. Se recomienda revisar el proceso.`}
+      </div>
+    </div>
 
-    '<!-- CONCLUSIÓN -->'+
-    '<div class="card">'+
-      '<div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Conclusi\u00f3n del Per\u00edodo '+year+filtroTag+'</div>'+
-      '<div class="alert '+conclusionCls+'">'+conclusionTxt+'</div>'+
-    '</div>'+
-
-    (obsRows?
-      '<div class="card">'+
-        '<div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Observaciones Registradas</div>'+
-        '<div class="table-wrap"><table>'+
-          '<thead><tr><th>C\u00f3digo</th><th>Tipo Mant.</th><th>Mes</th><th>Estado</th><th>Observaci\u00f3n</th></tr></thead>'+
-          '<tbody>'+obsRows+'</tbody>'+
-        '</table></div>'+
-      '</div>'
-      :'');
-
-  cont.innerHTML=html;
+    <!-- OBSERVACIONES -->
+    ${obsRows?`<div class="card">
+      <div class="card-title"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"/></svg> Observaciones Registradas</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Código</th><th>Tipo Mant.</th><th>Mes</th><th>Estado</th><th>Observación</th></tr></thead>
+        <tbody>${obsRows}</tbody>
+      </table></div>
+    </div>`:''}
+  `;
 }
 
 function exportarPDF(){
@@ -2932,10 +2720,46 @@ function saveSelfReg(){
     showToast('✅ Solicitud enviada. El administrador revisará su cuenta.');
   }).catch(function(){hideSpinner();apiErr();});
 }
+function cargarDelegacionesEnSelect(selectId,valorActual){
+  var sel=document.getElementById(selectId);
+  sel.innerHTML='<option value="">Cargando...</option>';
+  var cached=db.catalogos&&db.catalogos.delegacion;
+  function poblar(items){
+    sel.innerHTML='<option value="">Seleccionar...</option>';
+    (items||[]).forEach(function(item){
+      var val=typeof item==='object'?(item.valor||item.value||item):item;
+      var opt=document.createElement('option');
+      opt.value=val;opt.textContent=val;
+      if(val===valorActual) opt.selected=true;
+      sel.appendChild(opt);
+    });
+    if(valorActual&&!sel.querySelector('option[value="'+valorActual+'"]')){
+      var opt2=document.createElement('option');
+      opt2.value=valorActual;opt2.textContent=valorActual;opt2.selected=true;
+      sel.appendChild(opt2);
+    }
+  }
+  if(cached&&cached.length>0){
+    poblar(cached);
+  } else {
+    api('getCatalogos',{categoria:'delegacion'}).then(function(r){
+      var items=r.ok&&Array.isArray(r.data)?r.data:[];
+      if(!db.catalogos) db.catalogos={};
+      db.catalogos.delegacion=items;
+      poblar(items);
+    }).catch(function(){
+      var defaults=['Alta Verapaz','Baja Verapaz','Chimaltenango','Chiquimula',
+        'El Progreso','Escuintla','Guatemala','Huehuetenango','Izabal','Jalapa',
+        'Jutiapa','Pet\u00e9n','Quetzaltenango','Quich\u00e9','Retalhuleu','Sacatep\u00e9quez',
+        'San Marcos','Santa Rosa','Solol\u00e1','Suchitep\u00e9quez','Totonicap\u00e1n','Zacapa'];
+      poblar(defaults);
+    });
+  }
+}
 function openAdminRegModal(){
-  ['arUsername','arPassword','arNombre'].forEach(f=>document.getElementById(f).value='');
-  document.getElementById('arDepto').value='';
+  ['arUsername','arPassword','arNombre'].forEach(function(f){document.getElementById(f).value='';});
   document.getElementById('arRol').value='editor';
+  cargarDelegacionesEnSelect('arDepto','');
   openModal('adminRegModal');
 }
 function saveAdminReg(){
@@ -2980,13 +2804,13 @@ function openEditUserModal(username){
   document.getElementById('euUsername').value=u.username;
   document.getElementById('euPassword').value='';
   document.getElementById('euNombre').value=u.nombre||'';
-  document.getElementById('euDepto').value=u.delegacion||'';
   document.getElementById('euRol').value=u.rol||'editor';
   document.getElementById('euInfoUser').textContent=u.username;
   document.getElementById('euInfoRol').textContent=u.rol||'—';
   document.getElementById('euInfoDepto').textContent=u.delegacion||'—';
   document.getElementById('euInfoPass').textContent=u.password?'••••••••':'—';
   document.getElementById('euDeleteBtn').style.display=username==='admin'?'none':'inline-flex';
+  cargarDelegacionesEnSelect('euDepto',u.delegacion||'');
   openModal('editUserModal');
 }
 function saveEditUser(){
@@ -3423,88 +3247,107 @@ function switchUserTab(tab){
 }
 function renderSolicitudes(){
   if(!db.solicitudes) db.solicitudes=[];
-  const pendientes=db.solicitudes.filter(s=>s.estado==='Pendiente'||!s.estado);
-  const cont=document.getElementById('solicitudesContent');
+  var pendientes=db.solicitudes.filter(function(s){return s.estado==='Pendiente'||!s.estado;});
+  var cont=document.getElementById('solicitudesContent');
   if(pendientes.length===0){
     cont.innerHTML='<div class="empty"><div class="empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div><p>No hay solicitudes pendientes.</p></div>';
     return;
   }
-  cont.innerHTML=pendientes.map((s,i)=>{
-    const idx=db.solicitudes.indexOf(s);
-    const nombre=s.nombre_completo||s.nombre||'—';
-    const usuario=s.usuario_solicitado||s.username||'—';
-    const delegacion=s.delegacion||'—';
-    const fecha=s.fecha_solicitud||s.fechaSolicitud||'';
-    return `<div class="card" style="border-left:4px solid var(--warning);">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-        <div>
-          <div style="font-weight:700;font-size:.95rem;">${nombre}</div>
-          <div style="font-size:.82rem;color:var(--text-secondary);margin:4px 0;">
-            Usuario: <strong style="font-family:var(--mono);">${usuario}</strong> &nbsp;·&nbsp;
-            Delegación: <strong>${delegacion}</strong>
-          </div>
-          <div style="font-size:.75rem;color:var(--text-secondary);">
-            Solicitado el ${fecha?new Date(fecha).toLocaleDateString('es-GT',{day:'2-digit',month:'long',year:'numeric'}):'—'}
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <div class="form-group" style="margin-bottom:0;min-width:120px;">
-            <select id="rolSolicitud_${idx}" style="padding:7px 10px;border:2px solid var(--border);border-radius:8px;font-family:var(--font);font-size:.82rem;">
-              <option value="editor">Editor</option>
-              <option value="admin">Administrador</option>
-            </select>
-          </div>
-          <button class="btn btn-success btn-sm" onclick="aprobarSolicitud(${idx})">Aprobar</button>
-          <button class="btn btn-danger btn-sm" onclick="rechazarSolicitud(${idx})">Rechazar</button>
-        </div>
-      </div>
-    </div>`;
+  cont.innerHTML=pendientes.map(function(s,i){
+    var idSol=s.id_solicitud||s.id||'';
+    var nombre=s.nombre_completo||s.nombre||'\u2014';
+    var usuario=s.usuario_solicitado||s.username||'\u2014';
+    var delegacion=s.delegacion||'\u2014';
+    var fecha=s.fecha_solicitud||s.fechaSolicitud||'';
+    var rolKey='rolSolicitud_'+i;
+    return '<div class="card" style="border-left:4px solid var(--warning);">'+
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;">'+
+        '<div>'+
+          '<div style="font-weight:700;font-size:.95rem;">'+nombre+'</div>'+
+          '<div style="font-size:.82rem;color:var(--text-secondary);margin:4px 0;">'+
+            'Usuario: <strong style="font-family:var(--mono);">'+usuario+'</strong> &nbsp;&middot;&nbsp; '+
+            'Delegaci\u00f3n: <strong>'+delegacion+'</strong>'+
+          '</div>'+
+          '<div style="font-size:.75rem;color:var(--text-secondary);">'+
+            'Solicitado el '+(fecha?new Date(fecha).toLocaleDateString('es-GT',{day:'2-digit',month:'long',year:'numeric'}):'\u2014')+
+          '</div>'+
+          (s.motivo?'<div style="font-size:.78rem;color:var(--text-secondary);margin-top:4px;">Motivo: <em>'+s.motivo+'</em></div>':'')+
+        '</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'+
+          '<div class="form-group" style="margin-bottom:0;min-width:120px;">'+
+            '<select id="'+rolKey+'" style="padding:7px 10px;border:2px solid var(--border);border-radius:8px;font-family:var(--font);font-size:.82rem;">'+
+              '<option value="editor">Editor</option>'+
+              '<option value="admin">Administrador</option>'+
+            '</select>'+
+          '</div>'+
+          '<button class="btn btn-success btn-sm" onclick="aprobarSolicitud(\''+idSol+'\',\''+rolKey+'\')">Aprobar</button>'+
+          '<button class="btn btn-danger btn-sm" onclick="rechazarSolicitud(\''+idSol+'\')">Rechazar</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
   }).join('');
 }
-function aprobarSolicitud(idx){
-  if(!db.solicitudes||!db.solicitudes[idx]) return;
-  const s=db.solicitudes[idx];
-  const rol=document.getElementById(`rolSolicitud_${idx}`).value;
-  const usuario=s.usuario_solicitado||s.username;
-  if(db.users.find(u=>u.username===usuario)){showToast('⚠️ Ya existe un usuario con ese nombre');return;}
+function aprobarSolicitud(idSol,rolKey){
+  var s=db.solicitudes.find(function(x){
+    return (x.id_solicitud===idSol)||(x.id===idSol);
+  });
+  if(!s){showToast('⚠️ Solicitud no encontrada');return;}
+  var rol=document.getElementById(rolKey)?document.getElementById(rolKey).value:'editor';
+  var usuario=s.usuario_solicitado||s.username;
+  if(db.users.find(function(u){return u.username===usuario;})){
+    showToast('⚠️ Ya existe un usuario con ese nombre');return;
+  }
   showSpinner('Aprobando solicitud...');
   api('responderSolicitud',{
-    id:s.id_solicitud||s.id||idx,
-    estado:'Aprobado',
+    id_solicitud:idSol,
+    decision:'Aprobado',
+    admin:currentUser.username,
     rol:rol,
-    revisado_por:currentUser.username,
-    fecha_revision:new Date().toISOString()
+    fecha_revision:new Date().toISOString().split('T')[0]
   }).then(function(r){
     hideSpinner();
     if(!r.ok){apiErr(r.error||'Error al aprobar');return;}
-    db.users.push({
-      username:usuario,
-      password:s.password_solicitada||s.password||'',
-      nombre:s.nombre_completo||s.nombre||'',
-      rol,
-      delegacion:s.delegacion||''
+    showSpinner('Recargando...');
+    Promise.all([
+      api('getUsuarios'),
+      api('getSolicitudes')
+    ]).then(function(results){
+      hideSpinner();
+      if(results[0].ok&&Array.isArray(results[0].data)) db.users=results[0].data.map(mapUserFromSheet);
+      if(results[1].ok&&Array.isArray(results[1].data)) db.solicitudes=results[1].data;
+      actualizarBadgeSolicitudes();renderUsers();renderSolicitudes();
+      showToast('✅ Usuario "'+(s.nombre_completo||s.nombre)+'" aprobado como '+rol);
+    }).catch(function(){
+      hideSpinner();
+      db.users.push({username:usuario,password:s.password_solicitada||'',nombre:s.nombre_completo||s.nombre||'',rol:rol,delegacion:s.delegacion||''});
+      s.estado='Aprobado';
+      actualizarBadgeSolicitudes();renderUsers();renderSolicitudes();
     });
-    db.solicitudes[idx].estado='Aprobado';
-    actualizarBadgeSolicitudes();renderUsers();renderSolicitudes();
-    showToast(`✅ Usuario "${s.nombre_completo||s.nombre}" aprobado como ${rol}`);
   }).catch(function(){hideSpinner();apiErr();});
 }
-function rechazarSolicitud(idx){
-  if(!db.solicitudes||!db.solicitudes[idx]) return;
-  const s=db.solicitudes[idx];
-  const nombre=s.nombre_completo||s.nombre||'—';
-  if(!confirm(`¿Rechazar la solicitud de "${nombre}"?`)) return;
+function rechazarSolicitud(idSol){
+  var s=db.solicitudes.find(function(x){
+    return (x.id_solicitud===idSol)||(x.id===idSol);
+  });
+  if(!s){showToast('⚠️ Solicitud no encontrada');return;}
+  var nombre=s.nombre_completo||s.nombre||'\u2014';
+  if(!confirm('\u00bfRechazar la solicitud de "'+nombre+'"?')) return;
   showSpinner('Rechazando...');
   api('responderSolicitud',{
-    id:s.id_solicitud||s.id||idx,
-    estado:'Rechazado',
-    revisado_por:currentUser.username,
-    fecha_revision:new Date().toISOString()
+    id_solicitud:idSol,
+    decision:'Rechazado',
+    admin:currentUser.username,
+    fecha_revision:new Date().toISOString().split('T')[0]
   }).then(function(r){
     hideSpinner();
     if(!r.ok){apiErr(r.error||'Error al rechazar');return;}
-    db.solicitudes[idx].estado='Rechazado';
-    actualizarBadgeSolicitudes();renderSolicitudes();
+    api('getSolicitudes').then(function(r2){
+      if(r2.ok&&Array.isArray(r2.data)) db.solicitudes=r2.data;
+      actualizarBadgeSolicitudes();renderSolicitudes();
+    }).catch(function(){
+      s.estado='Rechazado';
+      actualizarBadgeSolicitudes();renderSolicitudes();
+    });
     showToast('🗑️ Solicitud rechazada');
   }).catch(function(){hideSpinner();apiErr();});
 }
