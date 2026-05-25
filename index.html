@@ -690,11 +690,7 @@ select:focus{outline:none;border-color:#93c5fd;box-shadow:0 0 0 2px rgba(59,130,
           <option value="">— Seleccionar bien —</option>
         </select>
         <select id="mantYearSel" onchange="renderMant()">
-          <option value="2024">2024</option>
-          <option value="2025">2025</option>
-          <option value="2026">2026</option>
-          <option value="2027">2027</option>
-          <option value="2028">2028</option>
+          <option value="">Cargando...</option>
         </select>
         <select id="mantFiltro" onchange="renderMant()">
           <option value="todos">Todos</option>
@@ -718,11 +714,8 @@ select:focus{outline:none;border-color:#93c5fd;box-shadow:0 0 0 2px rgba(59,130,
           <div class="form-group" style="margin-bottom:0;">
             <label>Año</label>
             <select id="reportYear" onchange="renderReport()">
-              <option value="2024">2024</option>
-              <option value="2025" selected>2025</option>
-              <option value="2026">2026</option>
-              <option value="2027">2027</option>
-              <option value="2028">2028</option>
+              <option value="">Cargando...</option>
+            </select>
             </select>
           </div>
           <div class="form-group" style="margin-bottom:0;">
@@ -1187,10 +1180,7 @@ select:focus{outline:none;border-color:#93c5fd;box-shadow:0 0 0 2px rgba(59,130,
         <div class="form-group">
           <label>Clasificación *</label>
           <select id="bClasificacion">
-            <option value="">Seleccionar...</option>
-            <option value="Equipo Crítico">⚠️ Equipo Crítico</option>
-            <option value="Alto Valor">💎 Alto Valor</option>
-            <option value="Equipo Sensible">🔒 Equipo Sensible</option>
+            <option value="">Cargando...</option>
           </select>
         </div>
         <div class="form-group">
@@ -1246,11 +1236,7 @@ select:focus{outline:none;border-color:#93c5fd;box-shadow:0 0 0 2px rgba(59,130,
         <div class="form-group">
           <label>Ejercicio Fiscal (Año) *</label>
           <select id="progAnio">
-            <option value="2024">2024</option>
-            <option value="2025" selected>2025</option>
-            <option value="2026">2026</option>
-            <option value="2027">2027</option>
-            <option value="2028">2028</option>
+            <option value="">Cargando...</option>
           </select>
         </div>
       </div>
@@ -1258,9 +1244,7 @@ select:focus{outline:none;border-color:#93c5fd;box-shadow:0 0 0 2px rgba(59,130,
         <div class="form-group">
           <label>Tipo de Mantenimiento *</label>
           <select id="progTipoMant">
-            <option value="">Seleccionar...</option>
-            <option>Preventivo</option><option>Correctivo</option>
-            <option>Predictivo</option><option>Rutinario</option>
+            <option value="">Cargando...</option>
           </select>
         </div>
         <div class="form-group">
@@ -1856,7 +1840,11 @@ function openBienModal(id){
   editingBienId=id||null;bFotoData=null;
   document.getElementById('bienModalTitle').textContent=id?'Editar Bien':'Nuevo Bien';
   poblarSelectTipo();poblarSelectRenglon();
-  ['bCodigo','bTipo','bMarca','bModelo','bSerie','bAnio','bPrecio','bDesc','bClasificacion','bRenglon'].forEach(f=>{const el=document.getElementById(f);if(el)el.value='';});
+  // Poblar Clasificación desde Sheets
+  var clasifActual=id?(db.bienes.find(function(x){return x.id===id;})||{}).clasificacion||'':'';
+  poblarSelectClasificacion(clasifActual);
+  ['bCodigo','bTipo','bMarca','bModelo','bSerie','bAnio','bPrecio','bDesc','bRenglon'].forEach(function(f){var el=document.getElementById(f);if(el)el.value='';});
+  if(!id) document.getElementById('bClasificacion').value='';
   document.getElementById('bFotoPreview').style.display='none';
   document.getElementById('bFotoPreview').src='';
   document.getElementById('photoPlaceholder').style.display='block';
@@ -1864,25 +1852,24 @@ function openBienModal(id){
   document.getElementById('fotoInfo').textContent='';
   document.getElementById('bFotoInput').value='';
   if(id){
-    const b=db.bienes.find(x=>x.id===id);
+    var b=db.bienes.find(function(x){return x.id===id;});
     if(!b) return;
     document.getElementById('bCodigo').value=b.codigo;
     document.getElementById('bTipo').value=b.tipo;
     document.getElementById('bMarca').value=b.marca;
-    const bModEl=document.getElementById('bModelo');if(bModEl)bModEl.value=b.modelo||'';
+    var bModEl=document.getElementById('bModelo');if(bModEl)bModEl.value=b.modelo||'';
     document.getElementById('bSerie').value=b.serie||'';
     document.getElementById('bAnio').value=b.anio||'';
     document.getElementById('bPrecio').value=b.precio||'';
     document.getElementById('bDesc').value=b.desc||'';
-    document.getElementById('bClasificacion').value=b.clasificacion||'';
     document.getElementById('bRenglon').value=b.renglon||'';
     if(b.foto){
       bFotoData=b.foto;
       document.getElementById('bFotoPreview').src=b.foto;
       document.getElementById('bFotoPreview').style.display='block';
       document.getElementById('photoPlaceholder').style.display='none';
-      const sizeComp=parseFloat((b.foto.length*0.75/1024/1024).toFixed(2));
-      document.getElementById('fotoInfo').innerHTML=`📷 Foto existente &nbsp;·&nbsp; Tamaño: <strong>${sizeComp} MB</strong>`;
+      var sizeComp=parseFloat((b.foto.length*0.75/1024/1024).toFixed(2));
+      document.getElementById('fotoInfo').innerHTML='📷 Foto existente &nbsp;·&nbsp; Tamaño: <strong>'+sizeComp+' MB</strong>';
       document.getElementById('fotoInfoWrap').style.display='flex';
     }
   }
@@ -2075,14 +2062,18 @@ function renderProgDetalle(){
 function openProgModal(id){
   editingProgId=id||null;
   document.getElementById('progModalTitle').textContent=id?'Editar Programación':'Nueva Programación';
-  const bienId=document.getElementById('progBienSel').value;
+  var bienId=document.getElementById('progBienSel').value;
   renderProgSelects();
+  // P3: poblar Ejercicio Fiscal con rango dinámico ±3 años
+  poblarSelectAnios();
+  // P2: poblar Tipo de Mantenimiento desde Sheets
+  var tipoActual=id?(db.programaciones.find(function(p){return p.id===id;})||{}).tipoMant||'':'';
+  poblarSelectTipoMant(tipoActual);
   if(id){
-    const pg=db.programaciones.find(p=>p.id===id);
+    var pg=db.programaciones.find(function(p){return p.id===id;});
     document.getElementById('progBienSelModal').value=pg.bienId;
-    document.getElementById('progBienSelModal').disabled=true; // no cambiar bien al editar
+    document.getElementById('progBienSelModal').disabled=true;
     document.getElementById('progAnio').value=pg.anio;
-    document.getElementById('progTipoMant').value=pg.tipoMant;
     document.getElementById('progPeriodo').value=pg.periodo;
     document.getElementById('progCosto').value=pg.costo||'';
     if(pg.periodo!=='NA'){
@@ -2093,7 +2084,6 @@ function openProgModal(id){
     }
   } else {
     document.getElementById('progBienSelModal').disabled=false;
-    document.getElementById('progTipoMant').value='';
     document.getElementById('progPeriodo').value='';
     document.getElementById('progCosto').value='';
     document.getElementById('progAnio').value=new Date().getFullYear().toString();
@@ -3095,21 +3085,107 @@ function getCatalogo(key){
 }
 
 function poblarSelectTipo(){
-  const sel=document.getElementById('bTipo');
-  const cur=sel.value;
-  const items=getCatalogo('tiposBien');
-  sel.innerHTML='<option value="">Seleccionar...</option>'+items.map(i=>`<option value="${i}">${i}</option>`).join('');
+  var sel=document.getElementById('bTipo');
+  var cur=sel.value;
+  var items=getCatalogo('tiposBien');
+  sel.innerHTML='<option value="">Seleccionar...</option>'+items.map(function(i){return '<option value="'+i+'">'+i+'</option>';}).join('');
   if(cur) sel.value=cur;
 }
 
 function poblarSelectRenglon(){
-  const sel=document.getElementById('bRenglon');
-  const cur=sel.value;
-  const items=getCatalogo('renglones');
-  sel.innerHTML='<option value="">Seleccionar...</option>'+items.map(i=>`<option value="${i}">${i}</option>`).join('');
+  var sel=document.getElementById('bRenglon');
+  var cur=sel.value;
+  var items=getCatalogo('renglones');
+  sel.innerHTML='<option value="">Seleccionar...</option>'+items.map(function(i){return '<option value="'+i+'">'+i+'</option>';}).join('');
   if(cur) sel.value=cur;
 }
 
+// P1: Clasificación desde Sheets — usa cargarDelegacionesEnSelect pattern
+function poblarSelectClasificacion(valorActual){
+  var sel=document.getElementById('bClasificacion');
+  sel.innerHTML='<option value="">Cargando...</option>';
+  var cached=db.catalogos&&db.catalogos.clasificacion;
+  function poblar(items){
+    sel.innerHTML='<option value="">Seleccionar...</option>';
+    (items||[]).forEach(function(item){
+      var val=typeof item==='object'?(item.valor||item.value||item):item;
+      var opt=document.createElement('option');
+      opt.value=val;opt.textContent=val;
+      if(val===valorActual) opt.selected=true;
+      sel.appendChild(opt);
+    });
+    if(valorActual&&!sel.querySelector('option[value="'+valorActual+'"]')){
+      var opt2=document.createElement('option');
+      opt2.value=valorActual;opt2.textContent=valorActual;opt2.selected=true;
+      sel.appendChild(opt2);
+    }
+  }
+  if(cached&&cached.length>0){
+    poblar(cached);
+  } else {
+    api('getCatalogos',{categoria:'clasificacion'}).then(function(r){
+      var items=r.ok&&Array.isArray(r.data)?r.data:[];
+      if(!db.catalogos) db.catalogos={};
+      db.catalogos.clasificacion=items;
+      poblar(items);
+    }).catch(function(){
+      poblar(['⚠️ Equipo Crítico','Alto Valor','🔒 Equipo Sensible']);
+    });
+  }
+}
+
+// P2: Tipo de Mantenimiento desde Sheets
+function poblarSelectTipoMant(valorActual){
+  var sel=document.getElementById('progTipoMant');
+  sel.innerHTML='<option value="">Cargando...</option>';
+  var cached=db.catalogos&&db.catalogos.tipo_mantenimiento;
+  function poblar(items){
+    sel.innerHTML='<option value="">Seleccionar...</option>';
+    (items||[]).forEach(function(item){
+      var val=typeof item==='object'?(item.valor||item.value||item):item;
+      var opt=document.createElement('option');
+      opt.value=val;opt.textContent=val;
+      if(val===valorActual) opt.selected=true;
+      sel.appendChild(opt);
+    });
+    if(valorActual&&!sel.querySelector('option[value="'+valorActual+'"]')){
+      var opt2=document.createElement('option');
+      opt2.value=valorActual;opt2.textContent=valorActual;opt2.selected=true;
+      sel.appendChild(opt2);
+    }
+  }
+  if(cached&&cached.length>0){
+    poblar(cached);
+  } else {
+    api('getCatalogos',{categoria:'tipo_mantenimiento'}).then(function(r){
+      var items=r.ok&&Array.isArray(r.data)?r.data:[];
+      if(!db.catalogos) db.catalogos={};
+      db.catalogos.tipo_mantenimiento=items;
+      poblar(items);
+    }).catch(function(){
+      poblar(['Preventivo','Correctivo','Predictivo','Rutinario']);
+    });
+  }
+}
+
+// P3: Ejercicio Fiscal — rango dinámico ±3 años del actual
+function poblarSelectAnios(){
+  var anioActual=new Date().getFullYear();
+  ['progAnio','mantYearSel','reportYear'].forEach(function(id){
+    var sel=document.getElementById(id);
+    if(!sel) return;
+    var curVal=sel.value||anioActual.toString();
+    sel.innerHTML='';
+    for(var y=anioActual-3;y<=anioActual+3;y++){
+      var opt=document.createElement('option');
+      opt.value=String(y);opt.textContent=String(y);
+      if(String(y)===curVal) opt.selected=true;
+      sel.appendChild(opt);
+    }
+    // Si no quedó ninguno seleccionado, seleccionar año actual
+    if(!sel.value) sel.value=anioActual.toString();
+  });
+}
 function renderCatalogos(){
   renderTablaCatalogo('tiposBien','tablaTiposBien');
   renderTablaCatalogo('renglones','tablaRenglones');
@@ -3415,13 +3491,9 @@ loadDB();
 if(currentUser){
   _applyLogin(currentUser);
 }
-// Año actual en todos los selectores de año
-const _anioActual = new Date().getFullYear().toString();
-['mantYearSel','reportYear','progAnio'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(!el) return;
-  [...el.options].forEach(o=>{if(o.value===_anioActual) o.selected=true;});
-});
+// Poblar selectores de año con rango dinámico al cargar
+poblarSelectAnios();
+// Si hay sesión activa, restaurar login
 document.getElementById('loginUser').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 </script>
