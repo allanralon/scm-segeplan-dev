@@ -2159,22 +2159,47 @@ function renderMantSelects(){
   renderMant();
 }
 function renderMant(){
-  const bienId=document.getElementById('mantBienSel').value;
-  const year=parseInt(document.getElementById('mantYearSel').value);
-  const filtro=document.getElementById('mantFiltro').value;
-  const cont=document.getElementById('mantContent');
+  var bienId=document.getElementById('mantBienSel').value;
+  var year=parseInt(document.getElementById('mantYearSel').value);
+  var filtro=document.getElementById('mantFiltro').value;
+  var cont=document.getElementById('mantContent');
   if(!bienId){cont.innerHTML='<div class="alert alert-info">Seleccione un bien para ver su seguimiento.</div>';return;}
   cont.innerHTML='<div style="text-align:center;padding:24px;color:var(--text-secondary);"><em>Cargando seguimiento...</em></div>';
   api('getSeguimiento',{id_bien:bienId,anio:year}).then(function(r){
-    if(r.ok && Array.isArray(r.data)){
-      db.mantMap=buildSeguimientoMap(r.data);
-      // Guardar raw para desmarcar
-      db.seguimientoRaw=r.data;
-    } else {
-      db.mantMap={};db.seguimientoRaw=[];
+    // Construir cache con clave id_programacion_mes para lookup O(1)
+    // Esta es la fuente de verdad para saber si un registro ya existe en Sheets
+    db.seguimientoCache={};
+    db.mantMap={};
+    if(r.ok&&Array.isArray(r.data)){
+      r.data.forEach(function(s){
+        // Clave: id_programacion + '_' + mes (nombre del mes en español)
+        var cacheKey=s.id_programacion+'_'+s.mes;
+        db.seguimientoCache[cacheKey]={
+          id_seguimiento:s.id_seguimiento,
+          estado:s.estado,
+          fecha_ejecucion:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
+          ejecutado_por:s.ejecutado_por||'',
+          observaciones:s.observaciones||''
+        };
+        // También construir mantMap (índice numérico) para el render UI
+        var mesIdx=MONTHS.indexOf(s.mes);
+        if(mesIdx>=0){
+          var mapKey=s.id_programacion+'_'+mesIdx;
+          db.mantMap[mapKey]={
+            id_seguimiento:s.id_seguimiento,
+            ejecutado:s.estado==='Ejecutado',
+            fecha:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
+            responsable:s.ejecutado_por||'',
+            obs:s.observaciones||''
+          };
+        }
+      });
     }
     _renderMantUI(bienId,year,filtro,cont);
-  }).catch(function(){db.mantMap={};db.seguimientoRaw=[];_renderMantUI(bienId,year,filtro,cont);});
+  }).catch(function(){
+    db.seguimientoCache={};db.mantMap={};
+    _renderMantUI(bienId,year,filtro,cont);
+  });
 }
 function _renderMantUI(bienId,year,filtro,cont){
   const b=db.bienes.find(x=>x.id===bienId);
@@ -2239,26 +2264,20 @@ function _renderMantUI(bienId,year,filtro,cont){
   cont.innerHTML=html;
 }
 function toggleMant(progId,month,done,bienId,anio){
-  const b=db.bienes.find(x=>x.id===bienId);
-  const key=progId+'_'+month;
-  const rec=(db.mantMap&&db.mantMap[key])||{};
-  const obsActual=rec.obs||'';
+  var b=db.bienes.find(function(x){return x.id===bienId;});
+  var mapKey=progId+'_'+month;
+  var cacheKey=progId+'_'+MONTHS[month];  // clave del seguimientoCache
+  var rec=(db.mantMap&&db.mantMap[mapKey])||{};
+  var obsActual=rec.obs||'';
 
-  // Buscar registro existente en Sheets por id_programacion + mes + anio
-  // para obtener el id_seguimiento y ACTUALIZAR en lugar de crear duplicado
-  var registroExistente=null;
-  if(db.seguimientoRaw&&Array.isArray(db.seguimientoRaw)){
-    registroExistente=db.seguimientoRaw.find(function(s){
-      return s.id_programacion===progId
-          && s.mes===MONTHS[month]
-          && String(s.anio)===String(anio);
-    })||null;
-  }
+  // Verificar existencia usando seguimientoCache (cargado al abrir sección)
+  var cached=(db.seguimientoCache&&db.seguimientoCache[cacheKey])||null;
+  var idExistente=cached?cached.id_seguimiento:'';
 
-  var fechaHoy=new Date().toISOString().split('T')[0]; // siempre AAAA-MM-DD
+  var fechaHoy=new Date().toISOString().split('T')[0]; // AAAA-MM-DD siempre
 
   var seg={
-    id_seguimiento:registroExistente?registroExistente.id_seguimiento:'', // vacio = crear nuevo
+    id_seguimiento:idExistente,           // con valor = actualiza; vacío = crea nuevo
     id_programacion:progId,
     id_bien:bienId,
     codigo_bien:b?b.codigo:'',
@@ -2275,69 +2294,54 @@ function toggleMant(progId,month,done,bienId,anio){
   api('saveSeguimiento',{seguimiento:seg,usuario:currentUser.username}).then(function(r){
     hideSpinner();
     if(!r.ok){apiErr(r.error||'Error al guardar');return;}
+
+    // Actualizar cache con el id_seguimiento definitivo
+    // Si era nuevo, la API devuelve r.id con el id asignado
+    var idDefinitivo=idExistente||(r.id||'');
+    if(!db.seguimientoCache) db.seguimientoCache={};
+    db.seguimientoCache[cacheKey]={
+      id_seguimiento:idDefinitivo,
+      estado:seg.estado,
+      fecha_ejecucion:seg.fecha_ejecucion,
+      ejecutado_por:seg.ejecutado_por,
+      observaciones:obsActual
+    };
     if(!db.mantMap) db.mantMap={};
-    db.mantMap[key]={
-      id_seguimiento:registroExistente?registroExistente.id_seguimiento:(r.id||''),
+    db.mantMap[mapKey]={
+      id_seguimiento:idDefinitivo,
       ejecutado:done,
       fecha:seg.fecha_ejecucion,
       responsable:seg.ejecutado_por,
       obs:obsActual
     };
-    // Actualizar seguimientoRaw en memoria para que la proxima operacion
-    // encuentre el id_seguimiento correcto sin necesidad de recargar
-    if(!db.seguimientoRaw) db.seguimientoRaw=[];
-    if(registroExistente){
-      registroExistente.estado=seg.estado;
-      registroExistente.fecha_ejecucion=seg.fecha_ejecucion;
-      registroExistente.ejecutado_por=seg.ejecutado_por;
-    } else {
-      db.seguimientoRaw.push({
-        id_seguimiento:r.id||'',
-        id_programacion:progId,
-        id_bien:bienId,
-        mes:MONTHS[month],
-        anio:anio||new Date().getFullYear(),
-        estado:seg.estado,
-        fecha_ejecucion:seg.fecha_ejecucion,
-        ejecutado_por:seg.ejecutado_por,
-        observaciones:obsActual,
-        delegacion:seg.delegacion
-      });
-    }
-    showToast(done?'\u2714 Mantenimiento confirmado':'\u21a9 Mantenimiento desmarcado');
+
+    showToast(done?'✔ Mantenimiento confirmado':'↩ Mantenimiento desmarcado');
     renderMant();renderDash();
   }).catch(function(){hideSpinner();apiErr();});
 }
 function saveObs(progId,month,bienId,anio){
-  const el=document.getElementById('obs_'+progId+'_'+month);
+  var el=document.getElementById('obs_'+progId+'_'+month);
   if(!el) return;
-  const val=el.value;
-  const b=db.bienes.find(x=>x.id===bienId);
-  const key=progId+'_'+month;
-  const rec=(db.mantMap&&db.mantMap[key])||{};
+  var val=el.value;
+  var b=db.bienes.find(function(x){return x.id===bienId;});
+  var mapKey=progId+'_'+month;
+  var cacheKey=progId+'_'+MONTHS[month];  // clave del seguimientoCache
+  var rec=(db.mantMap&&db.mantMap[mapKey])||{};
 
-  // Buscar registro existente para obtener id_seguimiento y NO crear duplicado
-  var registroExistente=null;
-  if(db.seguimientoRaw&&Array.isArray(db.seguimientoRaw)){
-    registroExistente=db.seguimientoRaw.find(function(s){
-      return s.id_programacion===progId
-          && s.mes===MONTHS[month]
-          && String(s.anio)===String(anio);
-    })||null;
-  }
+  // Verificar existencia usando seguimientoCache
+  var cached=(db.seguimientoCache&&db.seguimientoCache[cacheKey])||null;
+  var idExistente=cached?cached.id_seguimiento:'';
 
-  // Fecha: usar la ya guardada en el registro existente (ya en AAAA-MM-DD),
-  // o la del mantMap. Nunca generar fecha nueva si el estado no cambia.
+  // Preservar fecha ya guardada, normalizada a AAAA-MM-DD
   var fechaExistente='';
-  if(registroExistente&&registroExistente.fecha_ejecucion){
-    // Normalizar por si vino con formato ISO completo de un registro previo
-    fechaExistente=String(registroExistente.fecha_ejecucion).split('T')[0];
+  if(cached&&cached.fecha_ejecucion){
+    fechaExistente=String(cached.fecha_ejecucion).split('T')[0];
   } else if(rec.fecha){
     fechaExistente=String(rec.fecha).split('T')[0];
   }
 
   var seg={
-    id_seguimiento:registroExistente?registroExistente.id_seguimiento:'',
+    id_seguimiento:idExistente,           // con valor = actualiza; vacío = crea nuevo
     id_programacion:progId,
     id_bien:bienId,
     codigo_bien:b?b.codigo:'',
@@ -2345,38 +2349,37 @@ function saveObs(progId,month,bienId,anio){
     anio:anio||new Date().getFullYear(),
     estado:rec.ejecutado?'Ejecutado':'Pendiente',
     fecha_ejecucion:fechaExistente,
-    ejecutado_por:rec.responsable||'',
+    ejecutado_por:cached?cached.ejecutado_por:(rec.responsable||''),
     observaciones:val,
     delegacion:currentUser.delegacion||''
   };
 
   api('saveSeguimiento',{seguimiento:seg,usuario:currentUser.username}).then(function(r){
     if(!r.ok){return;}
+    // Actualizar cache
+    var idDefinitivo=idExistente||(r.id||'');
+    if(!db.seguimientoCache) db.seguimientoCache={};
+    db.seguimientoCache[cacheKey]={
+      id_seguimiento:idDefinitivo,
+      estado:seg.estado,
+      fecha_ejecucion:seg.fecha_ejecucion,
+      ejecutado_por:seg.ejecutado_por,
+      observaciones:val
+    };
     if(!db.mantMap) db.mantMap={};
-    if(!db.mantMap[key]) db.mantMap[key]={ejecutado:false};
-    db.mantMap[key].obs=val;
-    // Actualizar seguimientoRaw en memoria
-    if(registroExistente){
-      registroExistente.observaciones=val;
-    } else if(r.id){
-      if(!db.seguimientoRaw) db.seguimientoRaw=[];
-      db.seguimientoRaw.push({
-        id_seguimiento:r.id,
-        id_programacion:progId,
-        id_bien:bienId,
-        mes:MONTHS[month],
-        anio:anio||new Date().getFullYear(),
-        estado:seg.estado,
-        fecha_ejecucion:seg.fecha_ejecucion,
-        ejecutado_por:seg.ejecutado_por,
-        observaciones:val,
-        delegacion:seg.delegacion
-      });
-    }
-    el.style.borderColor='var(--success)';
-    const ind=document.getElementById('obs_ind_'+progId+'_'+month);
-    if(ind){ind.textContent='\u2714 Guardado';ind.style.color='var(--success)';ind.style.opacity='1';}
-    setTimeout(function(){el.style.borderColor='';if(ind){ind.style.opacity='0';}},2000);
+    if(!db.mantMap[mapKey]) db.mantMap[mapKey]={ejecutado:false};
+    db.mantMap[mapKey].obs=val;
+    db.mantMap[mapKey].id_seguimiento=idDefinitivo;
+
+    var el2=document.getElementById('obs_'+progId+'_'+month);
+    if(el2) el2.style.borderColor='var(--success)';
+    var ind=document.getElementById('obs_ind_'+progId+'_'+month);
+    if(ind){ind.textContent='✔ Guardado';ind.style.color='var(--success)';ind.style.opacity='1';}
+    setTimeout(function(){
+      var el3=document.getElementById('obs_'+progId+'_'+month);
+      if(el3) el3.style.borderColor='';
+      if(ind) ind.style.opacity='0';
+    },2000);
   }).catch(function(){});
 }
 
