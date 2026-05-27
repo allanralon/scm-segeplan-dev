@@ -485,6 +485,7 @@ select:focus{outline:none;border-color:#93c5fd;box-shadow:0 0 0 2px rgba(59,130,
 .btn-icon-warn{background:#d4870a;color:#fff;}
 .btn-icon-warn:hover{background:#b87209;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 </head>
 <body>
@@ -1714,6 +1715,232 @@ function renderDash(){
     _renderDashUI(y,bienes,db.dashMap||{},db.dashMap||{},db.dashCache||{});
   });
 }
+// ── Dashboard Pending: state ──
+var _pendSelMes=null;
+var _pendDrFn=null;
+
+function pendSelectMes(m){_pendSelMes=m;_renderDashPending(dashYear);}
+
+function _renderDashPending(y){
+  var bienes=bienesVisibles();
+  var fn=_pendDrFn||function(){return {};};
+
+  // Build month data: for each month 0-11, list of {b, pg, ejecutado}
+  var monthData=[];
+  for(var mi=0;mi<12;mi++){
+    var items=[];
+    bienes.forEach(function(b){
+      progDeUnBien(b.id,y).forEach(function(pg){
+        if((pg.months||[]).indexOf(mi)>=0){
+          var exec=fn(pg.id,mi).ejecutado||false;
+          items.push({b:b,pg:pg,ejecutado:exec});
+        }
+      });
+    });
+    monthData.push(items);
+  }
+
+  var MN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  var MF=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+  // ── CARD 1: Calendario + Panel ──
+  var calHtml='<div style="display:card;background:var(--surface);border:1px solid var(--border);'+
+    'border-radius:var(--radius);margin-bottom:14px;overflow:hidden;">'+
+    // Card header
+    '<div style="display:flex;align-items:center;gap:8px;padding:14px 16px 10px;border-bottom:1px solid var(--border);">'+
+      '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>'+
+      '<span style="font-size:.88rem;font-weight:700;color:var(--text);">Mantenimientos Programados</span>'+
+    '</div>'+
+    // Two-column layout
+    '<div style="display:flex;flex-wrap:wrap;">'+
+
+    // LEFT: Calendar
+    '<div style="flex:1;min-width:200px;padding:14px 14px;border-right:1px solid var(--border);">'+
+      '<div style="display:flex;align-items:center;gap:5px;margin-bottom:10px;">'+
+        '<span style="display:inline-block;width:7px;height:7px;background:#2e7dce;border-radius:50%;flex-shrink:0;"></span>'+
+        '<span style="font-size:11px;color:var(--text-muted);">Meses con bienes programados</span>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;">';
+
+  for(var mi=0;mi<12;mi++){
+    var hasBienes=monthData[mi].length>0;
+    var isActive=(_pendSelMes===mi+1);
+    var cellStyle=[
+      'padding:8px 4px',
+      'text-align:center',
+      'cursor:pointer',
+      'border:1px solid '+(isActive?'#2e7dce':'#dde3ec'),
+      'border-radius:7px',
+      'background:'+(isActive?'#eef5fd':'#ffffff'),
+      'color:'+(isActive?'#1a3a5c':'#1c2940'),
+      'font-size:11px',
+      'font-weight:'+(isActive?'700':'500'),
+      'transition:background .12s'
+    ].join(';');
+    var dot=hasBienes
+      ?'<div style="width:5px;height:5px;background:#2e7dce;border-radius:50%;margin:4px auto 0;"></div>'
+      :'<div style="height:9px;"></div>';
+    calHtml+='<div onclick="pendSelectMes('+(mi+1)+')" '
+      +'onmouseover="if(!this.classList.contains(\'pend-active\'))this.style.background=\'#f4f6f9\'" '
+      +'onmouseout="if(!this.classList.contains(\'pend-active\'))this.style.background=\'#ffffff\'" '
+      +(isActive?'class="pend-active" ':'')
+      +'style="'+cellStyle+'">'
+      +MN[mi]+dot+'</div>';
+  }
+
+  calHtml+='</div></div>'+
+
+  // RIGHT: Panel
+  '<div style="flex:1;min-width:200px;padding:14px;">';
+
+  if(_pendSelMes===null){
+    calHtml+='<div style="display:flex;align-items:center;justify-content:center;height:100%;min-height:120px;'+
+      'font-size:12px;color:var(--text-muted);text-align:center;">'+
+      'Selecciona un mes para ver los bienes programados.</div>';
+  } else {
+    var selIdx=_pendSelMes-1;
+    var selItems=monthData[selIdx]||[];
+    var selEjec=selItems.filter(function(x){return x.ejecutado;}).length;
+    calHtml+=
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'+
+        '<span style="font-size:13px;font-weight:600;color:var(--text);">'+MF[selIdx]+' '+y+
+          ' <span style="font-weight:400;color:var(--text-secondary);">('+selItems.length+')</span></span>'+
+        '<span style="font-size:11px;color:var(--text-secondary);">'+selEjec+'/'+selItems.length+' Completado</span>'+
+      '</div>';
+    if(selItems.length===0){
+      calHtml+='<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:24px 0;">'+
+        'Sin bienes programados este mes.</div>';
+    } else {
+      calHtml+='<div style="max-height:180px;overflow-y:auto;padding-right:2px;">';
+      selItems.forEach(function(item){
+        var ejec=item.ejecutado;
+        calHtml+=
+          '<div style="'+
+            'padding:8px 10px;border-radius:var(--radius-sm);'+
+            'border:1px solid '+(ejec?'#1a9e6e':'#d4870a')+';'+
+            'background:'+(ejec?'#e8f8f2':'#fef8ec')+';'+
+            'margin-bottom:5px;'+
+            'display:flex;justify-content:space-between;align-items:center;">'+
+            '<div>'+
+              '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text);">'+item.b.codigo+'</div>'+
+              '<div style="font-size:10px;color:var(--text-secondary);margin-top:1px;">'+item.b.tipo+(item.b.marca?' · '+item.b.marca:'')+'</div>'+
+            '</div>'+
+            '<span style="'+
+              'background:'+(ejec?'#e8f8f2':'#fef8ec')+';'+
+              'color:'+(ejec?'#1a9e6e':'#d4870a')+';'+
+              'border:1px solid '+(ejec?'#1a9e6e':'#d4870a')+';'+
+              'font-size:10px;padding:2px 8px;border-radius:99px;white-space:nowrap;font-weight:600;">'+
+              (ejec?'Ejecutado':'Pendiente')+
+            '</span>'+
+          '</div>';
+      });
+      calHtml+='</div>';
+    }
+  }
+
+  calHtml+='</div>'+ // close right panel
+    '</div>'+ // close two-col
+    '</div>'; // close card
+
+  // ── CARD 2: Stacked Bar Chart ──
+  var progByMonth=monthData.map(function(items){return items.length;});
+  var execByMonth=monthData.map(function(items){
+    return items.filter(function(x){return x.ejecutado;}).length;
+  });
+
+  var chartHtml=
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>'+
+        '<span style="font-size:.88rem;font-weight:700;color:var(--text);">Programado vs Ejecutado — '+y+'</span>'+
+      '</div>'+
+      // HTML legend
+      '<div style="display:flex;gap:14px;margin-bottom:10px;">'+
+        '<div style="display:flex;align-items:center;gap:5px;">'+
+          '<div style="width:10px;height:10px;background:#2e7dce;border-radius:2px;flex-shrink:0;"></div>'+
+          '<span style="font-size:11px;color:var(--text-secondary);">Programado</span>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:5px;">'+
+          '<div style="width:10px;height:10px;background:#1a9e6e;border-radius:2px;flex-shrink:0;"></div>'+
+          '<span style="font-size:11px;color:var(--text-secondary);">Ejecutado</span>'+
+        '</div>'+
+      '</div>'+
+      '<div style="position:relative;height:200px;">'+
+        '<canvas id="_pendChartCanvas" role="img" aria-label="Gráfica de mantenimientos programados vs ejecutados por mes '+y+'"></canvas>'+
+      '</div>'+
+    '</div>';
+
+  document.getElementById('dashPending').innerHTML=calHtml+chartHtml;
+
+  // ── Render Chart.js ──
+  if(window._pendChart){window._pendChart.destroy();window._pendChart=null;}
+  var canvas=document.getElementById('_pendChartCanvas');
+  if(canvas&&window.Chart){
+    window._pendChart=new Chart(canvas,{
+      type:'bar',
+      data:{
+        labels:['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
+        datasets:[
+          {
+            label:'Programado',
+            data:progByMonth,
+            backgroundColor:'#2e7dce',
+            stack:'mant',
+            borderRadius:3
+          },
+          {
+            label:'Ejecutado',
+            data:execByMonth,
+            backgroundColor:'#1a9e6e',
+            stack:'mant',
+            borderRadius:3
+          }
+        ]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{
+            stacked:true,
+            grid:{display:false},
+            border:{display:false},
+            ticks:{font:{size:10},color:'#8a97a8'}
+          },
+          y:{
+            stacked:true,
+            beginAtZero:true,
+            border:{display:false},
+            grid:{color:'rgba(0,0,0,0.05)'},
+            ticks:{
+              font:{size:10},
+              color:'#8a97a8',
+              stepSize:1,
+              precision:0
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // ── Mobile: resize canvas ──
+  (function(){
+    function resizePendChart(){
+      var wrap=document.querySelector('#dashPending [style*="height:200px"]');
+      if(!wrap) return;
+      wrap.style.height=window.innerWidth<=640?'160px':'200px';
+      if(window._pendChart) window._pendChart.resize();
+    }
+    resizePendChart();
+    if(!window._pendChartResizer){
+      window.addEventListener('resize',resizePendChart);
+      window._pendChartResizer=true;
+    }
+  })();
+}
+
 // ── Dashboard progress: filter / pagination state ──
 var _dashFilter='todos';
 var _dashPage=1;
@@ -1925,29 +2152,8 @@ function _renderDashUI(y,bienes,dashMap,dashMapCur,dashCacheCur){
     '<div class="kpi-card '+(pct>=80?'kpi-violet':pct>=50?'kpi-orange':'kpi-blue')+'"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div><div class="kpi-val">'+pct+'%</div><div class="kpi-lbl">Eficiencia Global</div></div>';
   _dashDrFn=function(pid,m){return dashMap[pid+'_'+m]||{};};
   _renderDashProgress(y);
-  var curMonth=new Date().getMonth();
-  var curYear=new Date().getFullYear();
-  var pending=[];
-  bienes.forEach(function(b){
-    progDeUnBien(b.id,curYear).forEach(function(pg){
-      if((pg.months||[]).indexOf(curMonth)>=0&&!drc(pg.id,curMonth).ejecutado)
-        pending.push({b:b,pg:pg,m:curMonth});
-    });
-  });
-  var ph=curYear!==y?'<div class="alert alert-info">Pendientes del año actual ('+curYear+').</div>':'';
-  if(pending.length===0){
-    ph+='<div class="empty"><div class="empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div><p>¡Sin pendientes en '+MONTHS[curMonth]+'!</p></div>';
-  } else {
-    ph+='<div class="alert alert-warning">Hay '+pending.length+' mantenimiento(s) sin confirmar en '+MONTHS[curMonth]+' '+curYear+'.</div>';
-    pending.forEach(function(item){
-      ph+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">'+
-        '<span style="font-size:.85rem;font-weight:600;">'+item.b.codigo+' — '+item.b.marca+
-          ' <span style="color:var(--text-secondary);font-weight:400;">('+item.pg.tipoMant+')</span></span>'+
-        '<button class="btn btn-success btn-sm" onclick="quickConfirm(\''+item.pg.id+'\',' + item.m + ')">Confirmar</button>'+
-      '</div>';
-    });
-  }
-  document.getElementById('dashPending').innerHTML=ph;
+  _pendDrFn=function(pid,m){return dashMapCur[pid+'_'+m]||{};};
+  _renderDashPending(y);
 }
 function quickConfirm(progId,month){
   var pg=db.programaciones.find(function(p){return p.id===progId;});
