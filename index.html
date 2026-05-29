@@ -1303,7 +1303,9 @@ select:focus{outline:none;border-color:#93c5fd;box-shadow:0 0 0 2px rgba(59,130,
 // CONSTANTES
 // ============================================================
 const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-const API_URL='https://script.google.com/macros/s/AKfycbxQg0IYVLBc38iWt4ykOZc1UkStaJpSKCcBeK_JamPEvhti1hWgEQE-ADnPc8xirnFweQ/exec';
+// ── Supabase (scm-segeplan-dev) ──
+const SUPABASE_URL='https://hexpjkonxodothmmzpym.supabase.co';
+const SUPABASE_KEY='sb_publishable_8bvwc8dBumQRYY8NmU8x_A_cfkWHvVd';
 
 // Estado en memoria (ya no persiste en localStorage salvo sesión)
 let db={users:[],bienes:[],programaciones:[],seguimientos:[],catalogos:{}};
@@ -1314,16 +1316,31 @@ let editingProgId=null;
 let bFotoData=null;
 
 // ============================================================
-// API CENTRAL
+// SUPABASE REST API
 // ============================================================
-function api(accion,params){
-  return fetch(API_URL,{
-    method:'POST',
-    headers:{'Content-Type':'text/plain'},
-    body:JSON.stringify(Object.assign({accion:accion},params||{}))
-  }).then(function(r){return r.json();})
-    .catch(function(e){console.error('API error:',e);return {ok:false,error:e.message};});
+function sbFetch(tabla,method,params,body){
+  var url=SUPABASE_URL+'/rest/v1/'+tabla;
+  if(params&&Object.keys(params).length>0){
+    url+='?'+Object.entries(params).map(function(e){
+      return encodeURIComponent(e[0])+'='+encodeURIComponent(e[1]);
+    }).join('&');
+  }
+  var headers={
+    'apikey':SUPABASE_KEY,
+    'Authorization':'Bearer '+SUPABASE_KEY,
+    'Content-Type':'application/json'
+  };
+  if(method==='POST'||method==='PATCH') headers['Prefer']='return=representation';
+  var opts={method:method,headers:headers};
+  if(body) opts.body=JSON.stringify(body);
+  return fetch(url,opts)
+    .then(function(r){
+      if(!r.ok) return r.json().then(function(e){return {ok:false,error:e};});
+      return r.json().then(function(d){return {ok:true,data:d};});
+    })
+    .catch(function(e){console.error('sbFetch error:',e);return {ok:false,error:e.message};});
 }
+// Compatibilidad: la función api() ya no existe — usar sbFetch() directamente
 
 // ============================================================
 // SPINNER
@@ -1351,7 +1368,7 @@ function apiErr(msg){showToast('❌ '+(msg||'Error de conexión. Verifique su re
 // DB — solo sesión en localStorage
 // ============================================================
 function saveDB(){
-  // Solo persiste la sesión; los datos viven en Sheets
+  // Solo persiste la sesión; los datos viven en Supabase
   if(currentUser) localStorage.setItem('scm_session',JSON.stringify(currentUser));
 }
 function loadDB(){
@@ -1370,27 +1387,27 @@ function loadDB(){
 // ============================================================
 function doLogin(){
   loadDB();
-  const u=document.getElementById('loginUser').value.trim();
-  const p=document.getElementById('loginPass').value;
+  var u=document.getElementById('loginUser').value.trim();
+  var p=document.getElementById('loginPass').value;
   if(!u||!p){document.getElementById('loginErr').style.display='block';return;}
   showSpinner('Verificando credenciales...');
-  api('login',{usuario:u,password:p}).then(function(result){
-    hideSpinner();
-    if(!result.ok){
-      document.getElementById('loginErr').style.display='block';
-      return;
-    }
-    // Mapear campos de Sheets → estructura interna
-    const d=result.data||{};
-    currentUser={
-      username:d.usuario||d.username||u,
-      nombre:d.nombre_completo||d.nombre||u,
-      rol:d.rol||'editor',
-      delegacion:d.delegacion||''
-    };
-    localStorage.setItem('scm_session',JSON.stringify(currentUser));
-    _applyLogin(currentUser);
-  }).catch(function(){hideSpinner();apiErr('No se pudo conectar con el servidor.');});
+  sbFetch('usuarios','GET',{usuario:'eq.'+u,password:'eq.'+p,select:'*'})
+    .then(function(result){
+      hideSpinner();
+      if(!result.ok||!Array.isArray(result.data)||result.data.length===0){
+        document.getElementById('loginErr').style.display='block';
+        return;
+      }
+      var d=result.data[0];
+      currentUser={
+        username:d.usuario,
+        nombre:d.nombre||d.usuario,
+        rol:d.rol||'editor',
+        delegacion:d.delegacion||''
+      };
+      localStorage.setItem('scm_session',JSON.stringify(currentUser));
+      _applyLogin(currentUser);
+    }).catch(function(){hideSpinner();apiErr('No se pudo conectar con el servidor.');});
 }
 function _applyLogin(user){
   document.getElementById('currentUserLabel').textContent=user.nombre||user.username;
@@ -1440,17 +1457,20 @@ function doLogout(){
   document.getElementById('loginErr').style.display='none';
 }
 
-// Carga paralela de bienes, programaciones, usuarios y catálogos
+// Carga paralela desde Supabase
 function cargarTodosLosDatos(){
   var calls=[
-    api('getBienes').then(function(r){
-      if(r.ok && Array.isArray(r.data)) db.bienes=r.data.map(mapBienFromSheet);
+    sbFetch('bienes','GET',{select:'*'}).then(function(r){
+      if(r.ok&&Array.isArray(r.data)) db.bienes=r.data.map(mapBienFromSheet);
     }),
-    api('getProgramacion').then(function(r){
-      if(r.ok && Array.isArray(r.data)) db.programaciones=r.data.map(mapProgFromSheet);
+    sbFetch('programaciones','GET',{select:'*'}).then(function(r){
+      if(r.ok&&Array.isArray(r.data)) db.programaciones=r.data.map(mapProgFromSheet);
     }),
-    api('getUsuarios').then(function(r){
-      if(r.ok && Array.isArray(r.data)) db.users=r.data.map(mapUserFromSheet);
+    sbFetch('mantenimientos','GET',{select:'*'}).then(function(r){
+      if(r.ok&&Array.isArray(r.data)) db.seguimientos=r.data.map(mapMantFromSupabase);
+    }),
+    sbFetch('usuarios','GET',{select:'*'}).then(function(r){
+      if(r.ok&&Array.isArray(r.data)) db.users=r.data;
     }),
     cargarCatalogos()
   ];
@@ -1458,24 +1478,26 @@ function cargarTodosLosDatos(){
 }
 
 function cargarCatalogos(){
-  var cats=['tipo_bien','clasificacion','renglon','delegacion'];
-  var calls=cats.map(function(cat){
-    return api('getCatalogos',{categoria:cat}).then(function(r){
-      if(r.ok && Array.isArray(r.data)){
-        var key=cat==='tipo_bien'?'tiposBien':cat==='renglon'?'renglones':cat;
-        db.catalogos[key]=r.data.map(function(x){return x.valor||x;});
-      }
-    });
+  return sbFetch('catalogos','GET',{select:'*'}).then(function(r){
+    if(r.ok&&Array.isArray(r.data)){
+      if(!db.catalogos) db.catalogos={};
+      db.catalogos.tiposBien  =r.data.filter(function(x){return x.tipo==='tipo_bien';}).map(function(x){return x.valor;});
+      db.catalogos.clasificacion=r.data.filter(function(x){return x.tipo==='clasificacion';}).map(function(x){return x.valor;});
+      db.catalogos.renglones  =r.data.filter(function(x){return x.tipo==='renglon';}).map(function(x){return x.valor;});
+      db.catalogos.delegacion =r.data.filter(function(x){return x.tipo==='delegacion';}).map(function(x){return x.valor;});
+    }
   });
-  return Promise.all(calls);
 }
 
 // ============================================================
 // MAPEOS SHEETS ↔ APP
 // ============================================================
 function mapBienFromSheet(r){
+  // Supabase: id(uuid), codigo, tipo, marca, modelo, serie, anio,
+  //           precio, descripcion, clasificacion, renglon, delegacion,
+  //           foto, created_at, registrado_por
   return {
-    id:r.id_bien||r.id,
+    id:r.id,
     codigo:r.codigo||'',
     tipo:r.tipo||'',
     marca:r.marca||'',
@@ -1487,8 +1509,8 @@ function mapBienFromSheet(r){
     clasificacion:r.clasificacion||'',
     renglon:r.renglon||'',
     delegacion:r.delegacion||'',
-    foto:r.foto_url||null,
-    creadoEn:r.fecha_registro||'',
+    foto:r.foto||null,
+    creadoEn:r.created_at||'',
     creadoPor:r.registrado_por||''
   };
 }
@@ -1512,27 +1534,32 @@ function mapBienToSheet(b){
   };
 }
 function mapProgFromSheet(r){
-  var mesesArr=[];
-  if(r.meses&&typeof r.meses==='string'&&r.meses.trim()){
-    mesesArr=r.meses.split(',').map(function(m){
-      var idx=MONTHS.indexOf(m.trim());
-      return idx>=0?idx:parseInt(m.trim());
-    }).filter(function(i){return !isNaN(i)&&i>=0;});
-  } else if(Array.isArray(r.meses)){
-    mesesArr=r.meses;
-  }
+  // Supabase: id(uuid), bien_id, tipo_mant, periodo, costo_estimado, anio, observacion
+  // Los meses vienen de tabla mantenimientos (un registro por mes)
+  // Se reconstruyen post-carga en _buildProgMonths() usando db.seguimientos
   return {
-    id:r.id_programacion||r.id,
-    bienId:r.id_bien,
+    id:r.id,
+    bienId:r.bien_id,
     codigo_bien:r.codigo_bien||'',
-    tipoMant:r.tipo_mantenimiento||'',
-    periodo:r.periodicidad||'',
-    costo:parseFloat(r.costo_por_mant)||0,
+    tipoMant:r.tipo_mant||'',
+    periodo:r.periodo||'',
+    costo:parseFloat(r.costo_estimado)||0,
     anio:parseInt(r.anio)||new Date().getFullYear(),
-    months:mesesArr,
-    creadoEn:r.fecha_creacion||'',
+    months:[],  // se llena por _buildProgMonths() tras cargar mantenimientos
+    creadoEn:r.created_at||'',
     creadoPor:r.creado_por||''
   };
+}
+// Reconstruye prog.months desde db.seguimientos (llamar tras cargar ambas tablas)
+function _buildProgMonths(){
+  db.programaciones.forEach(function(pg){
+    var meses=db.seguimientos
+      .filter(function(s){return s.programacion_id===pg.id;})
+      .map(function(s){return s.mes-1;})  // mes 1-12 → índice 0-11
+      .filter(function(m,i,a){return a.indexOf(m)===i;})  // dedup
+      .sort(function(a,b){return a-b;});
+    pg.months=meses;
+  });
 }
 function mapProgToSheet(pg){
   return {
@@ -1549,12 +1576,30 @@ function mapProgToSheet(pg){
   };
 }
 function mapUserFromSheet(r){
+  // Supabase: id, usuario, password, nombre, rol, delegacion
   return {
-    username:r.usuario||r.username,
-    nombre:r.nombre_completo||r.nombre||'',
+    username:r.usuario,
+    nombre:r.nombre||r.usuario,
     password:r.password||'',
     rol:r.rol||'editor',
     delegacion:r.delegacion||''
+  };
+}
+function mapMantFromSupabase(r){
+  // r.mes = 1-12 (número de mes)
+  return {
+    id_seguimiento:r.id,
+    id_programacion:r.programacion_id,
+    id_bien:r.bien_id,
+    mes:MONTHS[r.mes-1]||'',      // convertir 1-12 → nombre
+    mes_num:r.mes,                 // conservar número para _buildProgMonths
+    programacion_id:r.programacion_id,
+    anio:r.anio,
+    estado:r.estado==='ejecutado'?'Ejecutado':'Pendiente',
+    fecha_ejecucion:r.fecha_ejecucion?String(r.fecha_ejecucion).split('T')[0]:'',
+    ejecutado_por:r.ejecutado_por||'',
+    observaciones:r.observacion||'',
+    costo_ejecutado:parseFloat(r.costo_ejecutado)||0
   };
 }
 // Construye estado de seguimiento desde array de registros de Sheets
@@ -2326,23 +2371,17 @@ function saveBien(){
   console.log('[saveBien] Enviando a API:', JSON.stringify(payload, null, 2));
   showSpinner('Guardando bien...');
 
-  fetch(API_URL,{
-    method:'POST',
-    headers:{'Content-Type':'text/plain'},
-    body:JSON.stringify(payload)
-  }).then(function(r){return r.json();})
+  // Guardar bien en Supabase: upsert por id
+  var sbMethod=editingBienId?'PATCH':'POST';
+  var sbParams=editingBienId?{id:'eq.'+editingBienId}:{};
+  sbFetch('bienes',sbMethod,sbParams,bien)
   .then(function(r){
-    console.log('[saveBien] Respuesta de API:', JSON.stringify(r, null, 2));
+    console.log('[saveBien] Respuesta Supabase:', r.ok);
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al guardar bien');return;}
-    // Recargar desde Sheets para confirmar que el dato llegó
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar bien');return;}
+    // Recargar bienes desde Supabase para confirmar
     showSpinner('Recargando bienes...');
-    fetch(API_URL,{
-      method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({accion:'getBienes',usuario:currentUser.username})
-    }).then(function(r2){return r2.json();})
-    .then(function(r2){
+    sbFetch('bienes','GET',{select:'*'}).then(function(r2){
       hideSpinner();
       console.log('[getBienes] Respuesta tras guardar:', r2.ok, 'total:', r2.data&&r2.data.length);
       if(r2.ok&&Array.isArray(r2.data)) db.bienes=r2.data.map(mapBienFromSheet);
@@ -2354,7 +2393,7 @@ function saveBien(){
       showToast(editingBienId?'✅ Bien actualizado':'✅ Bien registrado');
     });
   }).catch(function(e){
-    console.error('[saveBien] Error fetch:', e);
+    console.error('[saveBien] Error sbFetch:', e);
     hideSpinner();apiErr();
   });
 }
@@ -2528,23 +2567,17 @@ function saveProg(){
   console.log('[saveProg] Enviando a API:', JSON.stringify(payload, null, 2));
   showSpinner('Guardando programación...');
 
-  fetch(API_URL,{
-    method:'POST',
-    headers:{'Content-Type':'text/plain'},
-    body:JSON.stringify(payload)
-  }).then(function(r){return r.json();})
+  // Guardar programación en Supabase: upsert por id
+  var sbMethodP=editingProgId?'PATCH':'POST';
+  var sbParamsP=editingProgId?{id:'eq.'+editingProgId}:{};
+  sbFetch('programaciones',sbMethodP,sbParamsP,programacion)
   .then(function(r){
-    console.log('[saveProg] Respuesta de API:', JSON.stringify(r, null, 2));
+    console.log('[saveProg] Respuesta Supabase:', r.ok);
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al guardar programación');return;}
-    // Recargar desde Sheets para confirmar que el dato llegó
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar programación');return;}
+    // Recargar programaciones desde Supabase para confirmar
     showSpinner('Recargando programaciones...');
-    fetch(API_URL,{
-      method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({accion:'getProgramacion',usuario:currentUser.username})
-    }).then(function(r2){return r2.json();})
-    .then(function(r2){
+    sbFetch('programaciones','GET',{select:'*'}).then(function(r2){
       hideSpinner();
       console.log('[getProgramacion] Respuesta tras guardar:', r2.ok, 'total:', r2.data&&r2.data.length);
       if(r2.ok&&Array.isArray(r2.data)) db.programaciones=r2.data.map(mapProgFromSheet);
@@ -2562,7 +2595,7 @@ function saveProg(){
       showToast(editingProgId?'✅ Programación actualizada':'✅ Programación guardada');
     });
   }).catch(function(e){
-    console.error('[saveProg] Error fetch:', e);
+    console.error('[saveProg] Error sbFetch:', e);
     hideSpinner();apiErr();
   });
 }
