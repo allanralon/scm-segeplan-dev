@@ -3454,16 +3454,16 @@ function cargarDelegacionesEnSelect(selectId,valorActual){
   if(cached&&cached.length>0){
     poblar(cached);
   } else {
-    api('getCatalogos',{categoria:'delegacion'}).then(function(r){
-      var items=r.ok&&Array.isArray(r.data)?r.data:[];
+    sbFetch('catalogos','GET',{tipo:'eq.delegacion',select:'valor'}).then(function(r){
+      var items=r.ok&&Array.isArray(r.data)?r.data.map(function(x){return x.valor;}):[];
       if(!db.catalogos) db.catalogos={};
       db.catalogos.delegacion=items;
       poblar(items);
     }).catch(function(){
       var defaults=['Alta Verapaz','Baja Verapaz','Chimaltenango','Chiquimula',
         'El Progreso','Escuintla','Guatemala','Huehuetenango','Izabal','Jalapa',
-        'Jutiapa','Pet\u00e9n','Quetzaltenango','Quich\u00e9','Retalhuleu','Sacatep\u00e9quez',
-        'San Marcos','Santa Rosa','Solol\u00e1','Suchitep\u00e9quez','Totonicap\u00e1n','Zacapa'];
+        'Jutiapa','Petén','Quetzaltenango','Quiché','Retalhuleu','Sacatepéquez',
+        'San Marcos','Santa Rosa','Sololá','Suchitepéquez','Totonicapán','Zacapa'];
       poblar(defaults);
     });
   }
@@ -3890,13 +3890,13 @@ function poblarSelectClasificacion(valorActual){
   if(cached&&cached.length>0){
     poblar(cached);
   } else {
-    api('getCatalogos',{categoria:'clasificacion'}).then(function(r){
-      var items=r.ok&&Array.isArray(r.data)?r.data:[];
+    sbFetch('catalogos','GET',{tipo:'eq.clasificacion',select:'valor'}).then(function(r){
+      var items=r.ok&&Array.isArray(r.data)?r.data.map(function(x){return x.valor;}):[];
       if(!db.catalogos) db.catalogos={};
       db.catalogos.clasificacion=items;
       poblar(items);
     }).catch(function(){
-      poblar(['⚠️ Equipo Crítico','Alto Valor','🔒 Equipo Sensible']);
+      poblar(['Equipo Crítico','Alto Valor','Equipo Sensible']);
     });
   }
 }
@@ -3924,13 +3924,15 @@ function poblarSelectTipoMant(valorActual){
   if(cached&&cached.length>0){
     poblar(cached);
   } else {
-    api('getCatalogos',{categoria:'tipo_mantenimiento'}).then(function(r){
-      var items=r.ok&&Array.isArray(r.data)?r.data:[];
+    sbFetch('catalogos','GET',{tipo:'eq.tipo_mantenimiento',select:'valor'}).then(function(r){
+      var items=r.ok&&Array.isArray(r.data)?r.data.map(function(x){return x.valor;}):[];
       if(!db.catalogos) db.catalogos={};
       db.catalogos.tipo_mantenimiento=items;
+      // Fallback si Supabase no tiene datos aún
+      if(items.length===0) items=['Preventivo','Correctivo','Rutinario'];
       poblar(items);
     }).catch(function(){
-      poblar(['Preventivo','Correctivo','Predictivo','Rutinario']);
+      poblar(['Preventivo','Correctivo','Rutinario']);
     });
   }
 }
@@ -3984,9 +3986,9 @@ function agregarCatalogo(key,inputId){
   if(items.find(i=>i.toLowerCase()===val.toLowerCase())){showToast('⚠️ Ese valor ya existe');return;}
   const categoria=key==='tiposBien'?'tipo_bien':key==='renglones'?'renglon':key;
   showSpinner('Guardando...');
-  api('saveCatalogo',{catalogo:{categoria:categoria,valor:val}}).then(function(r){
+  sbFetch('catalogos','POST',{},{tipo:categoria,valor:val}).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al guardar');return;}
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar');return;}
     items.push(val);
     if(!db.catalogos) db.catalogos={};
     db.catalogos[key]=items;
@@ -4012,9 +4014,18 @@ function guardarEditCat(){
   const oldVal=items[idx];
   const categoria=key==='tiposBien'?'tipo_bien':key==='renglones'?'renglon':key;
   showSpinner('Guardando...');
-  api('saveCatalogo',{catalogo:{categoria:categoria,valor:val,valor_anterior:oldVal}}).then(function(r){
+  // Buscar id del registro para hacer PATCH
+  sbFetch('catalogos','GET',{tipo:'eq.'+categoria,valor:'eq.'+oldVal,select:'id'})
+  .then(function(found){
+    if(!found.ok||!found.data||found.data.length===0){
+      hideSpinner();apiErr('Registro no encontrado en catálogo');return;
+    }
+    var regId=found.data[0].id;
+    return sbFetch('catalogos','PATCH',{id:'eq.'+regId},{valor:val});
+  }).then(function(r){
+    if(!r) return; // ya manejado arriba
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al guardar');return;}
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar');return;}
     items[idx]=val;
     db.catalogos[key]=items;
     closeModal('editCatModal');
@@ -4029,9 +4040,18 @@ function eliminarCatalogo(key,idx){
   const val=items[idx];
   const categoria=key==='tiposBien'?'tipo_bien':key==='renglones'?'renglon':key;
   showSpinner('Eliminando...');
-  api('deleteCatalogo',{catalogo:{categoria:categoria,valor:val}}).then(function(r){
+  // Buscar id del registro para hacer DELETE
+  sbFetch('catalogos','GET',{tipo:'eq.'+categoria,valor:'eq.'+val,select:'id'})
+  .then(function(found){
+    if(!found.ok||!found.data||found.data.length===0){
+      hideSpinner();apiErr('Registro no encontrado en catálogo');return;
+    }
+    var regId=found.data[0].id;
+    return sbFetch('catalogos','DELETE',{id:'eq.'+regId});
+  }).then(function(r){
+    if(!r) return; // ya manejado arriba
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al eliminar');return;}
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
     items.splice(idx,1);
     db.catalogos[key]=items;
     renderTablaCatalogo(key,key==='tiposBien'?'tablaTiposBien':'tablaRenglones');
@@ -4266,3 +4286,31 @@ document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='
 </script>
 </body>
 </html>
+
+<!--
+=== SQL DATOS INICIALES — ejecutar UNA VEZ en Supabase SQL Editor ===
+
+INSERT INTO catalogos (tipo, valor) VALUES
+('tipo_bien','Vehículo'),
+('tipo_bien','Equipo de Cómputo'),
+('tipo_bien','Mobiliario'),
+('tipo_bien','Maquinaria'),
+('tipo_bien','Equipo de Oficina'),
+('tipo_bien','Planta/Generador'),
+('tipo_bien','Fotocopiadora'),
+('tipo_bien','Otro'),
+('clasificacion','Equipo Crítico'),
+('clasificacion','Alto Valor'),
+('clasificacion','Equipo Sensible'),
+('tipo_mantenimiento','Preventivo'),
+('tipo_mantenimiento','Correctivo'),
+('tipo_mantenimiento','Rutinario'),
+('delegacion','Sololá'),
+('delegacion','Quetzaltenango'),
+('delegacion','Huehuetenango'),
+('delegacion','San Marcos'),
+('delegacion','Totonicapán'),
+('delegacion','Retalhuleu');
+
+=== FIN SQL ===
+-->
