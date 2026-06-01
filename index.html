@@ -1335,6 +1335,10 @@ function sbFetch(tabla,method,params,body){
   if(body) opts.body=JSON.stringify(body);
   return fetch(url,opts)
     .then(function(r){
+      // 204 No Content (DELETE) o 201 sin cuerpo — no intentar parsear JSON
+      if(r.status===204||r.status===201){
+        return {ok:true,data:[]};
+      }
       if(!r.ok) return r.json().then(function(e){return {ok:false,error:e};});
       return r.json().then(function(d){return {ok:true,data:d};});
     })
@@ -4071,11 +4075,21 @@ function guardarEditCat(){
     if(!r) return; // ya manejado arriba
     hideSpinner();
     if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar');return;}
-    items[idx]=val;
-    db.catalogos[key]=items;
+    // Recargar desde Supabase para confirmar que el cambio llegó
     closeModal('editCatModal');
-    renderTablaCatalogo(key,key==='tiposBien'?'tablaTiposBien':'tablaRenglones');
-    showToast('✅ Valor actualizado');
+    showSpinner('Sincronizando...');
+    cargarCatalogos().then(function(){
+      hideSpinner();
+      renderCatalogos();
+      showToast('✅ Valor actualizado');
+    }).catch(function(){
+      hideSpinner();
+      // Fallback: actualizar local si la recarga falla
+      items[idx]=val;
+      db.catalogos[key]=items;
+      renderCatalogos();
+      showToast('✅ Valor actualizado');
+    });
   }).catch(function(){hideSpinner();apiErr();});
 }
 
@@ -4097,10 +4111,20 @@ function eliminarCatalogo(key,idx){
     if(!r) return; // ya manejado arriba
     hideSpinner();
     if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
-    items.splice(idx,1);
-    db.catalogos[key]=items;
-    renderTablaCatalogo(key,key==='tiposBien'?'tablaTiposBien':'tablaRenglones');
-    showToast('🗑️ Valor eliminado');
+    // Recargar desde Supabase para confirmar que el cambio llegó
+    showSpinner('Sincronizando...');
+    cargarCatalogos().then(function(){
+      hideSpinner();
+      renderCatalogos();
+      showToast('🗑️ Valor eliminado');
+    }).catch(function(){
+      hideSpinner();
+      // Fallback: actualizar local si la recarga falla
+      items.splice(idx,1);
+      db.catalogos[key]=items;
+      renderCatalogos();
+      showToast('🗑️ Valor eliminado');
+    });
   }).catch(function(){hideSpinner();apiErr();});
 }
 
