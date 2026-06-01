@@ -1538,20 +1538,17 @@ function mapBienToSheet(b){
   };
 }
 function mapProgFromSheet(r){
-  // Supabase: id(uuid), bien_id, tipo_mant, periodo, costo_estimado, anio, observacion
-  // Los meses vienen de tabla mantenimientos (un registro por mes)
-  // Se reconstruyen post-carga en _buildProgMonths() usando db.seguimientos
+  // Supabase: id, bien_id, tipo_mant, periodo, costo_estimado, anio, observacion, created_at
   return {
     id:r.id,
     bienId:r.bien_id,
-    codigo_bien:r.codigo_bien||'',
     tipoMant:r.tipo_mant||'',
     periodo:r.periodo||'',
     costo:parseFloat(r.costo_estimado)||0,
     anio:parseInt(r.anio)||new Date().getFullYear(),
-    months:[],  // se llena por _buildProgMonths() tras cargar mantenimientos
-    creadoEn:r.created_at||'',
-    creadoPor:r.creado_por||''
+    observacion:r.observacion||'',
+    months:[],
+    creadoEn:r.created_at||''
   };
 }
 // Reconstruye prog.months desde db.seguimientos (llamar tras cargar ambas tablas)
@@ -2547,62 +2544,98 @@ function saveProg(){
   if(!bienId||!anio||!tipoMant||!periodo){showToast('⚠️ Complete todos los campos obligatorios');return;}
   const months=periodo!=='NA'?getProgSelectedMonths():[];
   if(periodo!=='NA'&&months.length===0){showToast('⚠️ Seleccione al menos un mes');return;}
-  const bien=db.bienes.find(b=>b.id===bienId);
 
-  // Payload con claves exactas de Sheets — mismo patrón que saveSeguimiento
+  // Payload con columnas exactas de Supabase (tabla programaciones)
   const programacion={
-    id_programacion:editingProgId||'',
-    id_bien:bienId,
-    codigo_bien:bien?bien.codigo:'',
-    tipo_mantenimiento:tipoMant,
-    periodicidad:periodo,
-    costo_por_mant:parseFloat(document.getElementById('progCosto').value)||0,
+    bien_id:bienId,
+    tipo_mant:tipoMant,
+    periodo:periodo,
+    costo_estimado:parseFloat(document.getElementById('progCosto').value)||0,
     anio:parseInt(anio),
-    meses:months.map(function(i){return MONTHS[i];}).join(','),
-    fecha_creacion:new Date().toISOString(),
-    creado_por:currentUser.username
+    observacion:document.getElementById('progObs')?
+      document.getElementById('progObs').value.trim():''
   };
 
-  const payload={
-    accion:'saveProgramacion',
-    programacion:programacion,
-    usuario:currentUser.username
-  };
-
-  console.log('[saveProg] Enviando a API:', JSON.stringify(payload, null, 2));
   showSpinner('Guardando programación...');
 
-  // Guardar programación en Supabase: upsert por id
-  var sbMethodP=editingProgId?'PATCH':'POST';
-  var sbParamsP=editingProgId?{id:'eq.'+editingProgId}:{};
-  sbFetch('programaciones',sbMethodP,sbParamsP,programacion)
-  .then(function(r){
-    console.log('[saveProg] Respuesta Supabase:', r.ok);
-    hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar programación');return;}
-    // Recargar programaciones desde Supabase para confirmar
-    showSpinner('Recargando programaciones...');
-    sbFetch('programaciones','GET',{select:'*'}).then(function(r2){
+  if(editingProgId){
+    // PATCH — solo actualizar campos de la programación, sin tocar mantenimientos
+    sbFetch('programaciones','PATCH',{id:'eq.'+editingProgId},programacion)
+    .then(function(r){
       hideSpinner();
-      console.log('[getProgramacion] Respuesta tras guardar:', r2.ok, 'total:', r2.data&&r2.data.length);
-      if(r2.ok&&Array.isArray(r2.data)) db.programaciones=r2.data.map(mapProgFromSheet);
-      document.getElementById('progBienSelModal').disabled=false;
-      closeModal('progModal');
-      document.getElementById('progBienSel').value=bienId;
-      renderProgDetalle();renderDash();
-      showToast(editingProgId?'✅ Programación actualizada':'✅ Programación guardada');
-    }).catch(function(){
+      if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar programación');return;}
+      showSpinner('Recargando...');
+      sbFetch('programaciones','GET',{select:'*'}).then(function(r2){
+        hideSpinner();
+        if(r2.ok&&Array.isArray(r2.data)) db.programaciones=r2.data.map(mapProgFromSheet);
+        _buildProgMonths();
+        document.getElementById('progBienSelModal').disabled=false;
+        closeModal('progModal');
+        document.getElementById('progBienSel').value=bienId;
+        renderProgDetalle();renderDash();
+        showToast('✅ Programación actualizada');
+      }).catch(function(){
+        hideSpinner();
+        document.getElementById('progBienSelModal').disabled=false;
+        closeModal('progModal');
+        document.getElementById('progBienSel').value=bienId;
+        renderProgDetalle();renderDash();
+        showToast('✅ Programación actualizada');
+      });
+    }).catch(function(){hideSpinner();apiErr();});
+
+  } else {
+    // POST — crear programación y luego un registro en mantenimientos por cada mes
+    sbFetch('programaciones','POST',{},programacion)
+    .then(function(r){
       hideSpinner();
-      document.getElementById('progBienSelModal').disabled=false;
-      closeModal('progModal');
-      document.getElementById('progBienSel').value=bienId;
-      renderProgDetalle();renderDash();
-      showToast(editingProgId?'✅ Programación actualizada':'✅ Programación guardada');
-    });
-  }).catch(function(e){
-    console.error('[saveProg] Error sbFetch:', e);
-    hideSpinner();apiErr();
-  });
+      if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar programación');return;}
+      const progId=r.data&&r.data[0]&&r.data[0].id;
+      if(!progId){
+        showSpinner('Recargando...');
+        return sbFetch('programaciones','GET',{select:'*'}).then(function(r2){
+          hideSpinner();
+          if(r2.ok&&Array.isArray(r2.data)) db.programaciones=r2.data.map(mapProgFromSheet);
+          _buildProgMonths();
+          document.getElementById('progBienSelModal').disabled=false;
+          closeModal('progModal');
+          document.getElementById('progBienSel').value=bienId;
+          renderProgDetalle();renderDash();
+          showToast('✅ Programación guardada');
+        });
+      }
+      // Insertar un registro en mantenimientos por cada mes seleccionado (mes 1-12)
+      showSpinner('Creando mantenimientos...');
+      const insertPromises=(months.length>0?months:[]).map(function(mesIdx){
+        return sbFetch('mantenimientos','POST',{},{
+          programacion_id:progId,
+          bien_id:bienId,
+          mes:mesIdx+1,
+          anio:parseInt(anio),
+          estado:'pendiente',
+          costo_ejecutado:0
+        });
+      });
+      return Promise.all(insertPromises).then(function(){
+        return Promise.all([
+          sbFetch('programaciones','GET',{select:'*'}),
+          sbFetch('mantenimientos','GET',{select:'*'})
+        ]);
+      }).then(function(results){
+        hideSpinner();
+        if(results[0].ok&&Array.isArray(results[0].data))
+          db.programaciones=results[0].data.map(mapProgFromSheet);
+        if(results[1].ok&&Array.isArray(results[1].data))
+          db.seguimientos=results[1].data.map(mapMantFromSupabase);
+        _buildProgMonths();
+        document.getElementById('progBienSelModal').disabled=false;
+        closeModal('progModal');
+        document.getElementById('progBienSel').value=bienId;
+        renderProgDetalle();renderDash();
+        showToast('✅ Programación guardada');
+      });
+    }).catch(function(){hideSpinner();apiErr();});
+  }
 }
 function updateProgMonthsUI(){
   const p=document.getElementById('progPeriodo').value;
