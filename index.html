@@ -1468,22 +1468,26 @@ function doLogout(){
 
 // Carga paralela desde Supabase
 function cargarTodosLosDatos(){
-  var calls=[
-    sbFetch('bienes','GET',{select:'*'}).then(function(r){
-      if(r.ok&&Array.isArray(r.data)) db.bienes=r.data.map(mapBienFromSheet);
-    }),
-    sbFetch('programaciones','GET',{select:'*'}).then(function(r){
-      if(r.ok&&Array.isArray(r.data)) db.programaciones=r.data.map(mapProgFromSheet);
-    }),
-    sbFetch('mantenimientos','GET',{select:'*'}).then(function(r){
-      if(r.ok&&Array.isArray(r.data)) db.seguimientos=r.data.map(mapMantFromSupabase);
-    }),
-    sbFetch('usuarios','GET',{select:'*'}).then(function(r){
-      if(r.ok&&Array.isArray(r.data)) db.users=r.data;
-    }),
+  return Promise.all([
+    sbFetch('bienes','GET',{select:'*'}),
+    sbFetch('programaciones','GET',{select:'*'}),
+    sbFetch('mantenimientos','GET',{select:'*'}),
+    sbFetch('usuarios','GET',{select:'*'}),
     cargarCatalogos()
-  ];
-  return Promise.all(calls);
+  ]).then(function(results){
+    var rBienes=results[0],rProgs=results[1],rMants=results[2],rUsers=results[3];
+    if(rBienes.ok&&Array.isArray(rBienes.data))
+      db.bienes=rBienes.data.map(mapBienFromSheet);
+    if(rProgs.ok&&Array.isArray(rProgs.data))
+      db.programaciones=rProgs.data.map(mapProgFromSheet);
+    if(rMants.ok&&Array.isArray(rMants.data))
+      db.seguimientos=rMants.data.map(mapMantFromSupabase);
+    if(rUsers.ok&&Array.isArray(rUsers.data))
+      db.users=rUsers.data.map(mapUserFromSheet);
+    // CRITICO: _buildProgMonths debe llamarse DESPUES de que
+    // db.programaciones Y db.seguimientos tienen datos
+    _buildProgMonths();
+  });
 }
 
 function cargarCatalogos(){
