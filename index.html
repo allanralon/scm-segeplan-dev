@@ -1635,7 +1635,7 @@ function gotoSection(id,navEl){
   if(id==='secBienes') renderBienes();
   if(id==='secProg'){
     showSpinner('Cargando programaciones...');
-    api('getProgramacion').then(function(r){
+    sbFetch('programaciones','GET',{select:'*'}).then(function(r){
       hideSpinner();
       if(r.ok&&Array.isArray(r.data)) db.programaciones=r.data.map(mapProgFromSheet);
       renderProgSelects();
@@ -1647,8 +1647,8 @@ function gotoSection(id,navEl){
   if(id==='secUsers'){
     showSpinner('Cargando usuarios...');
     Promise.all([
-      api('getUsuarios').then(function(r){if(r.ok&&Array.isArray(r.data))db.users=r.data.map(mapUserFromSheet);}),
-      api('getSolicitudes').then(function(r){if(r.ok&&Array.isArray(r.data))db.solicitudes=r.data;})
+      sbFetch('usuarios','GET',{select:'*'}).then(function(r){if(r.ok&&Array.isArray(r.data))db.users=r.data.map(mapUserFromSheet);}),
+      sbFetch('solicitudes','GET',{select:'*'}).then(function(r){if(r.ok&&Array.isArray(r.data))db.solicitudes=r.data;})
     ]).then(function(){hideSpinner();renderUsers();actualizarBadgeSolicitudes();})
       .catch(function(){hideSpinner();renderUsers();});
   }
@@ -1696,12 +1696,12 @@ function renderDash(){
   var curYear=new Date().getFullYear();
   var needCur=(curYear!==y);
   var calls=[
-    api('getProgramacion',{anio:y}),
-    api('getSeguimiento',{anio:y})
+    sbFetch('programaciones','GET',{anio:'eq.'+y,select:'*'}),
+    sbFetch('mantenimientos','GET',{anio:'eq.'+y,select:'*'})
   ];
   if(needCur){
-    calls.push(api('getProgramacion',{anio:curYear}));
-    calls.push(api('getSeguimiento',{anio:curYear}));
+    calls.push(sbFetch('programaciones','GET',{anio:'eq.'+curYear,select:'*'}));
+    calls.push(sbFetch('mantenimientos','GET',{anio:'eq.'+curYear,select:'*'}));
   }
   Promise.all(calls).then(function(res){
     // Actualizar db.programaciones para el año seleccionado
@@ -2216,11 +2216,19 @@ function quickConfirm(progId,month){
     estado:'Ejecutado',fecha_ejecucion:new Date().toISOString().split('T')[0],
     ejecutado_por:currentUser.username,observaciones:'',delegacion:currentUser.delegacion||''
   };
+  // Mapear seg al esquema de Supabase (mantenimientos)
+  var sbSeg={programacion_id:seg.id_programacion,bien_id:seg.id_bien,
+    mes:month+1,anio:seg.anio,
+    estado:seg.estado==='Ejecutado'?'ejecutado':'pendiente',
+    fecha_ejecucion:seg.fecha_ejecucion||null,
+    ejecutado_por:seg.ejecutado_por||null,observacion:seg.observaciones||null};
+  var sbMethod=idExistente?'PATCH':'POST';
+  var sbParams=idExistente?{id:'eq.'+idExistente}:{};
   showSpinner('Confirmando...');
-  api('saveSeguimiento',{seguimiento:seg,usuario:currentUser.username}).then(function(r){
+  sbFetch('mantenimientos',sbMethod,sbParams,sbSeg).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al guardar');return;}
-    var id=idExistente||(r.id||'');
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar');return;}
+    var id=idExistente||(r.data&&r.data[0]&&r.data[0].id)||'';
     if(!db.dashMap) db.dashMap={};
     db.dashMap[progId+'_'+month]={id_seguimiento:id,ejecutado:true,fecha:seg.fecha_ejecucion,responsable:currentUser.username,obs:''};
     if(!db.dashCache) db.dashCache={};
@@ -2326,9 +2334,9 @@ function editBien(id){openBienModal(id);}
 function deleteBien(id){
   if(!confirm('¿Eliminar este bien y toda su programación?'))return;
   showSpinner('Eliminando bien...');
-  api('deleteBien',{id_bien:id}).then(function(r){
+  sbFetch('bienes','DELETE',{id:'eq.'+id}).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al eliminar');return;}
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
     db.bienes=db.bienes.filter(b=>b.id!==id);
     db.programaciones=db.programaciones.filter(p=>p.bienId!==id);
     renderBienes();renderDash();showToast('🗑️ Bien eliminado');
@@ -2622,9 +2630,9 @@ function getProgSelectedMonths(){
 function deleteProg(id){
   if(!confirm('¿Eliminar esta programación y su historial de ejecución?'))return;
   showSpinner('Eliminando programación...');
-  api('deleteProgramacion',{id_programacion:id}).then(function(r){
+  sbFetch('programaciones','DELETE',{id:'eq.'+id}).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al eliminar');return;}
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
     db.programaciones=db.programaciones.filter(p=>p.id!==id);
     renderProgDetalle();renderDash();showToast('🗑️ Programación eliminada');
   }).catch(function(){hideSpinner();apiErr();});
@@ -2649,11 +2657,18 @@ function renderMant(){
   const cont=document.getElementById('mantContent');
   if(!bienId){cont.innerHTML='<div class="alert alert-info">Seleccione un bien para ver su seguimiento.</div>';return;}
   cont.innerHTML='<div style="text-align:center;padding:24px;color:var(--text-secondary);"><em>Cargando seguimiento...</em></div>';
-  api('getSeguimiento',{id_bien:bienId,anio:year}).then(function(r){
-    if(r.ok && Array.isArray(r.data)){
-      db.mantMap=buildSeguimientoMap(r.data);
-      // Guardar raw para desmarcar
-      db.seguimientoRaw=r.data;
+  sbFetch('mantenimientos','GET',{bien_id:'eq.'+bienId,anio:'eq.'+year,select:'*'}).then(function(r){
+    if(r.ok&&Array.isArray(r.data)){
+      // Normalizar al formato esperado por buildSeguimientoMap
+      var normalizado=r.data.map(function(s){
+        return {id_seguimiento:s.id,id_programacion:s.programacion_id,id_bien:s.bien_id,
+          mes:MONTHS[s.mes-1]||'',anio:s.anio,
+          estado:s.estado==='ejecutado'?'Ejecutado':'Pendiente',
+          fecha_ejecucion:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
+          ejecutado_por:s.ejecutado_por||'',observaciones:s.observacion||''};
+      });
+      db.mantMap=buildSeguimientoMap(normalizado);
+      db.seguimientoRaw=normalizado;
     } else {
       db.mantMap={};db.seguimientoRaw=[];
     }
@@ -2756,12 +2771,16 @@ function toggleMant(progId,month,done,bienId,anio){
   };
 
   showSpinner(done?'Confirmando...':'Desmarcando...');
-  api('saveSeguimiento',{seguimiento:seg,usuario:currentUser.username}).then(function(r){
+  var idEx=registroExistente?registroExistente.id_seguimiento:'';
+  var sbSeg={programacion_id:progId,bien_id:bienId,mes:month+1,anio:seg.anio,
+    estado:done?'ejecutado':'pendiente',fecha_ejecucion:done?seg.fecha_ejecucion:null,
+    ejecutado_por:done?seg.ejecutado_por:null,observacion:obsActual||null};
+  sbFetch('mantenimientos',idEx?'PATCH':'POST',idEx?{id:'eq.'+idEx}:{},sbSeg).then(function(r){
     hideSpinner();
     if(!r.ok){apiErr(r.error||'Error al guardar');return;}
     if(!db.mantMap) db.mantMap={};
     db.mantMap[key]={
-      id_seguimiento:registroExistente?registroExistente.id_seguimiento:(r.id||''),
+      id_seguimiento:registroExistente?registroExistente.id_seguimiento:((r.data&&r.data[0]&&r.data[0].id)||''),
       ejecutado:done,
       fecha:seg.fecha_ejecucion,
       responsable:seg.ejecutado_por,
@@ -2776,7 +2795,7 @@ function toggleMant(progId,month,done,bienId,anio){
       registroExistente.ejecutado_por=seg.ejecutado_por;
     } else {
       db.seguimientoRaw.push({
-        id_seguimiento:r.id||'',
+        id_seguimiento:(r.data&&r.data[0]&&r.data[0].id)||'',
         id_programacion:progId,
         id_bien:bienId,
         mes:MONTHS[month],
@@ -2834,18 +2853,24 @@ function saveObs(progId,month,bienId,anio){
     delegacion:currentUser.delegacion||''
   };
 
-  api('saveSeguimiento',{seguimiento:seg,usuario:currentUser.username}).then(function(r){
+  var idExO=registroExistente?registroExistente.id_seguimiento:'';
+  var sbSegO={programacion_id:progId,bien_id:bienId,mes:month+1,anio:seg.anio,
+    estado:rec.ejecutado?'ejecutado':'pendiente',
+    fecha_ejecucion:seg.fecha_ejecucion||null,
+    ejecutado_por:seg.ejecutado_por||null,observacion:val};
+  sbFetch('mantenimientos',idExO?'PATCH':'POST',idExO?{id:'eq.'+idExO}:{},sbSegO).then(function(r){
     if(!r.ok){return;}
+    var newIdO=idExO||(r.data&&r.data[0]&&r.data[0].id)||'';
     if(!db.mantMap) db.mantMap={};
     if(!db.mantMap[key]) db.mantMap[key]={ejecutado:false};
     db.mantMap[key].obs=val;
     // Actualizar seguimientoRaw en memoria
     if(registroExistente){
       registroExistente.observaciones=val;
-    } else if(r.id){
+    } else if(newIdO){
       if(!db.seguimientoRaw) db.seguimientoRaw=[];
       db.seguimientoRaw.push({
-        id_seguimiento:r.id,
+        id_seguimiento:newIdO,
         id_programacion:progId,
         id_bien:bienId,
         mes:MONTHS[month],
@@ -2904,8 +2929,8 @@ function renderReport(){
   var cont=document.getElementById('reportContent');
   cont.innerHTML='<div style="text-align:center;padding:28px;color:var(--text-secondary);">⏳ Cargando reporte...</div>';
   Promise.all([
-    api('getProgramacion',{anio:year}),
-    api('getSeguimiento',{anio:year})
+    sbFetch('programaciones','GET',{anio:'eq.'+year,select:'*'}),
+    sbFetch('mantenimientos','GET',{anio:'eq.'+year,select:'*'})
   ]).then(function(res){
     if(res[0].ok&&Array.isArray(res[0].data)){
       var otros=db.programaciones.filter(function(p){return parseInt(p.anio)!==year;});
@@ -3425,9 +3450,15 @@ function saveSelfReg(){
     motivo:motivo
   };
   showSpinner('Enviando solicitud...');
-  api('solicitarAcceso',payload).then(function(r){
+  // Insertar solicitud directamente en tabla solicitudes
+  var sbSol={usuario_solicitado:payload.usuario_solicitado,
+    password_solicitada:payload.password_solicitada,
+    nombre_completo:payload.nombre_completo,
+    delegacion:payload.delegacion,motivo:payload.motivo||null,
+    estado:'Pendiente',fecha_solicitud:new Date().toISOString()};
+  sbFetch('solicitudes','POST',{},sbSol).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al enviar solicitud');return;}
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al enviar solicitud');return;}
     closeModal('selfRegModal');
     showToast('✅ Solicitud enviada. El administrador revisará tu cuenta.');
   }).catch(function(){hideSpinner();apiErr();});
@@ -3492,19 +3523,22 @@ function saveAdminReg(){
     creado_por:currentUser.username
   };
   showSpinner('Creando usuario...');
-  api('saveUsuario',{usuario:userObj}).then(function(r){
+  var sbUser={usuario:userObj.usuario,password:userObj.password,
+    nombre:userObj.nombre_completo,delegacion:userObj.delegacion,
+    rol:userObj.rol,activo:true};
+  sbFetch('usuarios','POST',{},sbUser).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al crear usuario');return;}
-    db.users.push(mapUserFromSheet(userObj));
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al crear usuario');return;}
+    db.users.push(mapUserFromSheet(sbUser));
     closeModal('adminRegModal');renderUsers();showToast('✅ Usuario creado');
   }).catch(function(){hideSpinner();apiErr();});
 }
 function deleteUser(username){
   if(!confirm('¿Eliminar este usuario?'))return;
   showSpinner('Eliminando...');
-  api('deleteUsuario',{usuario:username}).then(function(r){
+  sbFetch('usuarios','DELETE',{usuario:'eq.'+username}).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al eliminar');return;}
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
     db.users=db.users.filter(u=>u.username!==username);
     renderUsers();showToast('🗑️ Usuario eliminado');
   }).catch(function(){hideSpinner();apiErr();});
@@ -3544,9 +3578,13 @@ function saveEditUser(){
   };
   if(newPass) userObj.password=newPass;
   showSpinner('Guardando cambios...');
-  api('saveUsuario',{usuario:userObj,usuario_original:origUser}).then(function(r){
+  // PATCH por usuario original
+  var sbPatch={usuario:userObj.usuario,nombre:userObj.nombre_completo,
+    delegacion:userObj.delegacion,rol:userObj.rol};
+  if(userObj.password) sbPatch.password=userObj.password;
+  sbFetch('usuarios','PATCH',{usuario:'eq.'+origUser},sbPatch).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al guardar');return;}
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar');return;}
     const idx=db.users.findIndex(x=>x.username===origUser);
     if(idx>=0){
       db.users[idx].username=newUser;
@@ -3573,9 +3611,9 @@ function deleteUserFromModal(){
   if(username==='admin'){showToast('⚠️ No se puede eliminar el administrador principal');return;}
   if(!confirm(`¿Eliminar al usuario "${username}"? Esta acción no se puede deshacer.`))return;
   showSpinner('Eliminando...');
-  api('deleteUsuario',{usuario:username}).then(function(r){
+  sbFetch('usuarios','DELETE',{usuario:'eq.'+username}).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al eliminar');return;}
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
     db.users=db.users.filter(u=>u.username!==username);
     closeModal('editUserModal');renderUsers();
     showToast('🗑️ Usuario eliminado');
@@ -3654,8 +3692,15 @@ function verFicha(id){
 
   // PASO 3: Llamar API sin filtro de anio para obtener TODO el historial del bien
   // El historial se renderiza UNICAMENTE cuando esta promesa resuelve
-  api('getSeguimiento',{id_bien:id}).then(function(result){
-    var seguimientos=result.ok&&Array.isArray(result.data)?result.data:[];
+  sbFetch('mantenimientos','GET',{bien_id:'eq.'+id,select:'*'}).then(function(result){
+    // Normalizar mantenimientos de Supabase al formato esperado por renderizarHistorialFicha
+    var seguimientos=(result.ok&&Array.isArray(result.data)?result.data:[]).map(function(s){
+      return {id_programacion:s.programacion_id,id_bien:s.bien_id,
+        mes:MONTHS[s.mes-1]||'',anio:s.anio,
+        estado:s.estado==='ejecutado'?'Ejecutado':'Pendiente',
+        fecha_ejecucion:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
+        ejecutado_por:s.ejecutado_por||'',observaciones:s.observacion||''};
+    });
 
     // Clave: String(id_programacion) + '_' + String(mes)
     // Usar el nombre del mes directamente (ej. "Marzo") — evita fallos por indice
@@ -4075,26 +4120,24 @@ function recuperarPass(){
   document.getElementById('recResult').style.display='none';
   document.getElementById('recNotFound').style.display='none';
   showSpinner('Buscando cuenta...');
-  api('login',{usuario:u,password:'__check_only__',solo_buscar:true}).then(function(result){
+  sbFetch('usuarios','GET',{usuario:'eq.'+u,select:'usuario,nombre,delegacion'}).then(function(result){
     hideSpinner();
-    // Si la API no soporta solo_buscar, buscar en db.users local
-    const user=db.users.find(x=>x.username===u);
-    if(!user){
-      document.getElementById('recNotFound').style.display='block';
-      return;
+    if(!result.ok||!result.data||result.data.length===0){
+      document.getElementById('recNotFound').style.display='block';return;
     }
+    const user=result.data[0];
     document.getElementById('recResultMsg').innerHTML=
-      `Usuario encontrado: <strong>${user.nombre||user.username}</strong><br>
-       Delegación: <strong>${user.delegacion||'—'}</strong><br>
-       Contraseña actual: <strong style="font-family:var(--mono);font-size:1rem;letter-spacing:1px;">${user.password}</strong>`;
+      'Usuario encontrado: <strong>'+(user.nombre||user.usuario)+'</strong><br>'+
+      'Delegación: <strong>'+(user.delegacion||'—')+'</strong><br>'+
+      '<em style="font-size:.8rem;color:var(--text-secondary);">Contacte al administrador para recuperar su contraseña.</em>';
     document.getElementById('recResult').style.display='block';
   }).catch(function(){
     hideSpinner();
     const user=db.users.find(x=>x.username===u);
     if(!user){document.getElementById('recNotFound').style.display='block';return;}
     document.getElementById('recResultMsg').innerHTML=
-      `Usuario encontrado: <strong>${user.nombre||user.username}</strong><br>
-       Delegación: <strong>${user.delegacion||'—'}</strong>`;
+      'Usuario encontrado: <strong>'+(user.nombre||user.username)+'</strong><br>'+
+      'Delegación: <strong>'+(user.delegacion||'—')+'</strong>';
     document.getElementById('recResult').style.display='block';
   });
 }
@@ -4117,7 +4160,7 @@ function switchUserTab(tab){
     tabA.style.background='transparent'; tabA.style.color='var(--text-secondary)'; tabA.style.boxShadow='none';
     // Recargar solicitudes desde API
     showSpinner('Cargando solicitudes...');
-    api('getSolicitudes').then(function(r){
+    sbFetch('solicitudes','GET',{select:'*'}).then(function(r){
       hideSpinner();
       if(r.ok&&Array.isArray(r.data)) db.solicitudes=r.data;
       renderSolicitudes();
@@ -4177,32 +4220,37 @@ function aprobarSolicitud(idSol,rolKey){
     showToast('⚠️ Ya existe un usuario con ese nombre');return;
   }
   showSpinner('Aprobando solicitud...');
-  api('responderSolicitud',{
-    id_solicitud:idSol,
-    decision:'Aprobado',
-    admin:currentUser.username,
-    rol:rol,
-    fecha_revision:new Date().toISOString().split('T')[0]
-  }).then(function(r){
+  // 1. Crear usuario en Supabase
+  var newUser2={usuario:usuario,password:s.password_solicitada||'',
+    nombre:s.nombre_completo||s.nombre||'',rol:rol,delegacion:s.delegacion||'',activo:true};
+  // 2. Marcar solicitud como aprobada
+  var patchSol={estado:'Aprobado',revisado_por:currentUser.username,
+    fecha_revision:new Date().toISOString().split('T')[0]};
+  sbFetch('usuarios','POST',{},newUser2).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al aprobar');return;}
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al crear usuario');return;}
+    showSpinner('Actualizando solicitud...');
+    return sbFetch('solicitudes','PATCH',{id:'eq.'+idSol},patchSol);
+  }).then(function(r){
+    if(!r) return;
     showSpinner('Recargando...');
-    Promise.all([
-      api('getUsuarios'),
-      api('getSolicitudes')
-    ]).then(function(results){
-      hideSpinner();
-      if(results[0].ok&&Array.isArray(results[0].data)) db.users=results[0].data.map(mapUserFromSheet);
-      if(results[1].ok&&Array.isArray(results[1].data)) db.solicitudes=results[1].data;
-      actualizarBadgeSolicitudes();renderUsers();renderSolicitudes();
-      showToast('✅ Usuario "'+(s.nombre_completo||s.nombre)+'" aprobado como '+rol);
-    }).catch(function(){
-      hideSpinner();
-      db.users.push({username:usuario,password:s.password_solicitada||'',nombre:s.nombre_completo||s.nombre||'',rol:rol,delegacion:s.delegacion||''});
-      s.estado='Aprobado';
-      actualizarBadgeSolicitudes();renderUsers();renderSolicitudes();
-    });
-  }).catch(function(){hideSpinner();apiErr();});
+    return Promise.all([
+      sbFetch('usuarios','GET',{select:'*'}),
+      sbFetch('solicitudes','GET',{select:'*'})
+    ]);
+  }).then(function(results){
+    if(!results) return;
+    hideSpinner();
+    if(results[0].ok&&Array.isArray(results[0].data)) db.users=results[0].data.map(mapUserFromSheet);
+    if(results[1].ok&&Array.isArray(results[1].data)) db.solicitudes=results[1].data;
+    actualizarBadgeSolicitudes();renderUsers();renderSolicitudes();
+    showToast('✅ Usuario "'+(s.nombre_completo||s.nombre)+'" aprobado como '+rol);
+  }).catch(function(){
+    hideSpinner();
+    db.users.push({username:usuario,password:s.password_solicitada||'',nombre:s.nombre_completo||s.nombre||'',rol:rol,delegacion:s.delegacion||''});
+    s.estado='Aprobado';
+    actualizarBadgeSolicitudes();renderUsers();renderSolicitudes();
+  });
 }
 function rechazarSolicitud(idSol){
   var s=db.solicitudes.find(function(x){
@@ -4212,23 +4260,22 @@ function rechazarSolicitud(idSol){
   var nombre=s.nombre_completo||s.nombre||'\u2014';
   if(!confirm('\u00bfRechazar la solicitud de "'+nombre+'"?')) return;
   showSpinner('Rechazando...');
-  api('responderSolicitud',{
-    id_solicitud:idSol,
-    decision:'Rechazado',
-    admin:currentUser.username,
-    fecha_revision:new Date().toISOString().split('T')[0]
-  }).then(function(r){
+  var patchRech={estado:'Rechazado',revisado_por:currentUser.username,
+    fecha_revision:new Date().toISOString().split('T')[0]};
+  sbFetch('solicitudes','PATCH',{id:'eq.'+idSol},patchRech).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr(r.error||'Error al rechazar');return;}
-    api('getSolicitudes').then(function(r2){
-      if(r2.ok&&Array.isArray(r2.data)) db.solicitudes=r2.data;
-      actualizarBadgeSolicitudes();renderSolicitudes();
-    }).catch(function(){
-      s.estado='Rechazado';
-      actualizarBadgeSolicitudes();renderSolicitudes();
-    });
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al rechazar');return;}
+    return sbFetch('solicitudes','GET',{select:'*'});
+  }).then(function(r2){
+    if(!r2) return;
+    if(r2.ok&&Array.isArray(r2.data)) db.solicitudes=r2.data;
+    actualizarBadgeSolicitudes();renderSolicitudes();
     showToast('🗑️ Solicitud rechazada');
-  }).catch(function(){hideSpinner();apiErr();});
+  }).catch(function(){
+    hideSpinner();
+    s.estado='Rechazado';
+    actualizarBadgeSolicitudes();renderSolicitudes();
+  });
 }
 function actualizarBadgeSolicitudes(){
   const pendientes=(db.solicitudes||[]).filter(s=>s.estado==='Pendiente'||!s.estado);
