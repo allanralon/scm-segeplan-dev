@@ -1335,8 +1335,9 @@ function sbFetch(tabla,method,params,body){
   if(body) opts.body=JSON.stringify(body);
   return fetch(url,opts)
     .then(function(r){
-      // 204 No Content (DELETE) o 201 sin cuerpo — no intentar parsear JSON
-      if(r.status===204||r.status===201){
+      // 204 No Content (DELETE) — sin cuerpo, no parsear JSON
+      // 201 Created (POST) SÍ tiene cuerpo con el registro creado
+      if(r.status===204){
         return {ok:true,data:[]};
       }
       if(!r.ok) return r.json().then(function(e){return {ok:false,error:e};});
