@@ -1561,7 +1561,7 @@ function _buildProgMonths(){
   db.programaciones.forEach(function(pg){
     var meses=db.seguimientos
       .filter(function(s){return s.programacion_id===pg.id;})
-      .map(function(s){return s.mes-1;})  // mes 1-12 → índice 0-11
+      .map(function(s){return s.mes_num-1;})  // mes_num 1-12 → índice 0-11
       .filter(function(m,i,a){return a.indexOf(m)===i;})  // dedup
       .sort(function(a,b){return a-b;});
     pg.months=meses;
