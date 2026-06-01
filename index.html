@@ -1658,7 +1658,21 @@ function gotoSection(id,navEl){
       renderProgSelects();
     }).catch(function(){hideSpinner();renderProgSelects();});
   }
-  if(id==='secMant') renderMantSelects();
+  if(id==='secMant'){
+    showSpinner('Cargando seguimiento...');
+    Promise.all([
+      sbFetch('programaciones','GET',{select:'*'}),
+      sbFetch('mantenimientos','GET',{select:'*'})
+    ]).then(function(results){
+      hideSpinner();
+      if(results[0].ok&&Array.isArray(results[0].data))
+        db.programaciones=results[0].data.map(mapProgFromSheet);
+      if(results[1].ok&&Array.isArray(results[1].data))
+        db.seguimientos=results[1].data.map(mapMantFromSupabase);
+      _buildProgMonths();
+      renderMantSelects();
+    }).catch(function(){hideSpinner();renderMantSelects();});
+  }
   if(id==='secReport') renderReport();
   if(id==='secDatos') actualizarInfoConexion();
   if(id==='secUsers'){
