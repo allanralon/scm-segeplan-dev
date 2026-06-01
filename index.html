@@ -2343,6 +2343,7 @@ function deleteBien(id){
     if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
     db.bienes=db.bienes.filter(b=>b.id!==id);
     db.programaciones=db.programaciones.filter(p=>p.bienId!==id);
+    if(db.seguimientos) db.seguimientos=db.seguimientos.filter(s=>s.bien_id!==id);
     renderBienes();renderDash();showToast('🗑️ Bien eliminado');
   }).catch(function(){hideSpinner();apiErr();});
 }
@@ -2355,9 +2356,8 @@ function saveBien(){
   if(db.bienes.find(b=>b.codigo===codigo&&b.id!==editingBienId)){showToast('⚠️ Código ya existe');return;}
   const bModEl=document.getElementById('bModelo');
 
-  // Payload con claves exactas de Sheets — mismo patrón que saveSeguimiento
-  const bien={
-    id_bien:editingBienId||'',
+  // Payload con columnas exactas de Supabase
+  const bienData={
     codigo:codigo,
     tipo:tipo,
     marca:marca,
@@ -2368,44 +2368,37 @@ function saveBien(){
     descripcion:document.getElementById('bDesc').value.trim()||'',
     clasificacion:clasificacion,
     renglon:document.getElementById('bRenglon').value.trim()||'',
-    delegacion:currentUser.delegacion||'Global',
-    foto_url:bFotoData||'',
-    fecha_registro:new Date().toISOString(),
-    registrado_por:currentUser.username
+    delegacion:currentUser.delegacion||'',
+    foto:bFotoData||''
   };
+  // registrado_por solo en INSERT (no en PATCH)
+  if(!editingBienId) bienData.registrado_por=currentUser.username;
 
-  const payload={
-    accion:'saveBien',
-    bien:bien,
-    usuario:currentUser.username
-  };
-
-  console.log('[saveBien] Enviando a API:', JSON.stringify(payload, null, 2));
   showSpinner('Guardando bien...');
-
-  // Guardar bien en Supabase: upsert por id
-  var sbMethod=editingBienId?'PATCH':'POST';
-  var sbParams=editingBienId?{id:'eq.'+editingBienId}:{};
-  sbFetch('bienes',sbMethod,sbParams,bien)
+  sbFetch('bienes',editingBienId?'PATCH':'POST',
+          editingBienId?{id:'eq.'+editingBienId}:{},bienData)
   .then(function(r){
-    console.log('[saveBien] Respuesta Supabase:', r.ok);
     hideSpinner();
     if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar bien');return;}
-    // Recargar bienes desde Supabase para confirmar
+    // Recargar db.bienes desde Supabase para confirmar
     showSpinner('Recargando bienes...');
     sbFetch('bienes','GET',{select:'*'}).then(function(r2){
       hideSpinner();
-      console.log('[getBienes] Respuesta tras guardar:', r2.ok, 'total:', r2.data&&r2.data.length);
       if(r2.ok&&Array.isArray(r2.data)) db.bienes=r2.data.map(mapBienFromSheet);
-      closeModal('bienModal');renderBienes();renderDash();
+      closeModal('bienModal');
+      renderBienes();renderDash();
       showToast(editingBienId?'✅ Bien actualizado':'✅ Bien registrado');
+      editingBienId=null;
+      bFotoData=null;
     }).catch(function(){
       hideSpinner();
-      closeModal('bienModal');renderBienes();renderDash();
+      closeModal('bienModal');
+      renderBienes();renderDash();
       showToast(editingBienId?'✅ Bien actualizado':'✅ Bien registrado');
+      editingBienId=null;
+      bFotoData=null;
     });
-  }).catch(function(e){
-    console.error('[saveBien] Error sbFetch:', e);
+  }).catch(function(){
     hideSpinner();apiErr();
   });
 }
