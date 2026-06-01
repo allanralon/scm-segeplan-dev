@@ -1280,6 +1280,10 @@ select:focus{outline:none;border-color:#93c5fd;box-shadow:0 0 0 2px rgba(59,130,
         <label>Costo estimado por mantenimiento (Q)</label>
         <input type="number" id="progCosto" placeholder="ej. 500" min="0"/>
       </div>
+      <div class="form-group">
+        <label>Observación (opcional)</label>
+        <textarea id="progObs" rows="2" placeholder="Notas adicionales sobre esta programación..." style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font);font-size:.88rem;resize:vertical;"></textarea>
+      </div>
       <div class="form-group" id="progMonthsSection" style="display:none;">
         <label>Meses programados *</label>
         <div class="alert alert-info" style="margin-bottom:8px;font-size:.8rem;">
@@ -2591,12 +2595,51 @@ function saveProg(){
     .then(function(r){
       hideSpinner();
       if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar programación');return;}
-      const progId=r.data&&r.data[0]&&r.data[0].id;
-      if(!progId){
-        showSpinner('Recargando...');
-        return sbFetch('programaciones','GET',{select:'*'}).then(function(r2){
+      // Manejar r.data como array o como objeto directo (Supabase puede devolver ambos)
+      const progData=r.data;
+      const progId=Array.isArray(progData)
+        ?(progData[0]&&progData[0].id)
+        :(progData&&progData.id);
+      console.log('[saveProg] progId:', progId, '| r.data:', JSON.stringify(r.data));
+
+      // Función auxiliar: insertar mantenimientos por mes y recargar
+      function doInsertMants(pid){
+        if(!pid){
+          // No hay pid — recargar sin crear mantenimientos
+          showSpinner('Recargando...');
+          return sbFetch('programaciones','GET',{select:'*'}).then(function(r2){
+            hideSpinner();
+            if(r2.ok&&Array.isArray(r2.data)) db.programaciones=r2.data.map(mapProgFromSheet);
+            _buildProgMonths();
+            document.getElementById('progBienSelModal').disabled=false;
+            closeModal('progModal');
+            document.getElementById('progBienSel').value=bienId;
+            renderProgDetalle();renderDash();
+            showToast('✅ Programación guardada (sin meses)');
+          });
+        }
+        showSpinner('Creando mantenimientos...');
+        const insertPromises=(months.length>0?months:[]).map(function(mesIdx){
+          return sbFetch('mantenimientos','POST',{},{
+            programacion_id:pid,
+            bien_id:bienId,
+            mes:mesIdx+1,
+            anio:parseInt(anio),
+            estado:'pendiente',
+            costo_ejecutado:0
+          });
+        });
+        return Promise.all(insertPromises).then(function(){
+          return Promise.all([
+            sbFetch('programaciones','GET',{select:'*'}),
+            sbFetch('mantenimientos','GET',{select:'*'})
+          ]);
+        }).then(function(results){
           hideSpinner();
-          if(r2.ok&&Array.isArray(r2.data)) db.programaciones=r2.data.map(mapProgFromSheet);
+          if(results[0].ok&&Array.isArray(results[0].data))
+            db.programaciones=results[0].data.map(mapProgFromSheet);
+          if(results[1].ok&&Array.isArray(results[1].data))
+            db.seguimientos=results[1].data.map(mapMantFromSupabase);
           _buildProgMonths();
           document.getElementById('progBienSelModal').disabled=false;
           closeModal('progModal');
@@ -2605,36 +2648,24 @@ function saveProg(){
           showToast('✅ Programación guardada');
         });
       }
-      // Insertar un registro en mantenimientos por cada mes seleccionado (mes 1-12)
-      showSpinner('Creando mantenimientos...');
-      const insertPromises=(months.length>0?months:[]).map(function(mesIdx){
-        return sbFetch('mantenimientos','POST',{},{
-          programacion_id:progId,
-          bien_id:bienId,
-          mes:mesIdx+1,
-          anio:parseInt(anio),
-          estado:'pendiente',
-          costo_ejecutado:0
+
+      if(progId){
+        return doInsertMants(progId);
+      } else {
+        // Fallback: buscar el registro recién creado por bien_id+anio+tipo_mant
+        return sbFetch('programaciones','GET',{
+          bien_id:'eq.'+bienId,
+          anio:'eq.'+anio,
+          tipo_mant:'eq.'+tipoMant,
+          select:'id',
+          order:'created_at.desc',
+          limit:'1'
+        }).then(function(rGet){
+          const progId2=rGet.ok&&Array.isArray(rGet.data)&&rGet.data[0]&&rGet.data[0].id;
+          console.log('[saveProg] progId2 (fallback GET):', progId2);
+          return doInsertMants(progId2);
         });
-      });
-      return Promise.all(insertPromises).then(function(){
-        return Promise.all([
-          sbFetch('programaciones','GET',{select:'*'}),
-          sbFetch('mantenimientos','GET',{select:'*'})
-        ]);
-      }).then(function(results){
-        hideSpinner();
-        if(results[0].ok&&Array.isArray(results[0].data))
-          db.programaciones=results[0].data.map(mapProgFromSheet);
-        if(results[1].ok&&Array.isArray(results[1].data))
-          db.seguimientos=results[1].data.map(mapMantFromSupabase);
-        _buildProgMonths();
-        document.getElementById('progBienSelModal').disabled=false;
-        closeModal('progModal');
-        document.getElementById('progBienSel').value=bienId;
-        renderProgDetalle();renderDash();
-        showToast('✅ Programación guardada');
-      });
+      }
     }).catch(function(){hideSpinner();apiErr();});
   }
 }
