@@ -1645,9 +1645,16 @@ function gotoSection(id,navEl){
   if(id==='secBienes') renderBienes();
   if(id==='secProg'){
     showSpinner('Cargando programaciones...');
-    sbFetch('programaciones','GET',{select:'*'}).then(function(r){
+    Promise.all([
+      sbFetch('programaciones','GET',{select:'*'}),
+      sbFetch('mantenimientos','GET',{select:'*'})
+    ]).then(function(results){
       hideSpinner();
-      if(r.ok&&Array.isArray(r.data)) db.programaciones=r.data.map(mapProgFromSheet);
+      if(results[0].ok&&Array.isArray(results[0].data))
+        db.programaciones=results[0].data.map(mapProgFromSheet);
+      if(results[1].ok&&Array.isArray(results[1].data))
+        db.seguimientos=results[1].data.map(mapMantFromSupabase);
+      _buildProgMonths();
       renderProgSelects();
     }).catch(function(){hideSpinner();renderProgSelects();});
   }
@@ -1724,16 +1731,18 @@ function renderDash(){
     var dashCache={};
     if(res[1].ok&&Array.isArray(res[1].data)){
       res[1].data.forEach(function(s){
-        var mi=MONTHS.indexOf(s.mes);
-        if(mi>=0){
-          dashMap[s.id_programacion+'_'+mi]={
-            id_seguimiento:s.id_seguimiento,
-            ejecutado:s.estado==='Ejecutado',
+        // Datos crudos de Supabase: s.programacion_id, s.mes (1-12), s.estado ('ejecutado')
+        var mi=s.mes-1;  // mes 1-12 → índice 0-11
+        if(mi>=0&&mi<=11){
+          var key=s.programacion_id+'_'+mi;
+          dashMap[key]={
+            id_seguimiento:s.id,
+            ejecutado:s.estado==='ejecutado',
             fecha:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
-            responsable:s.ejecutado_por||'',obs:s.observaciones||''
+            responsable:s.ejecutado_por||'',obs:s.observacion||''
           };
-          dashCache[s.id_programacion+'_'+s.mes]={
-            id_seguimiento:s.id_seguimiento,estado:s.estado,
+          dashCache[s.programacion_id+'_'+(mi+1)]={
+            id_seguimiento:s.id,estado:s.estado,
             fecha_ejecucion:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:''
           };
         }
@@ -1750,16 +1759,18 @@ function renderDash(){
       dashMapCur={}; dashCacheCur={};
       if(res[3]&&res[3].ok&&Array.isArray(res[3].data)){
         res[3].data.forEach(function(s){
-          var mi=MONTHS.indexOf(s.mes);
-          if(mi>=0){
-            dashMapCur[s.id_programacion+'_'+mi]={
-              id_seguimiento:s.id_seguimiento,
-              ejecutado:s.estado==='Ejecutado',
+          // Datos crudos de Supabase: s.programacion_id, s.mes (1-12), s.estado ('ejecutado')
+          var mi=s.mes-1;  // mes 1-12 → índice 0-11
+          if(mi>=0&&mi<=11){
+            var keyCur=s.programacion_id+'_'+mi;
+            dashMapCur[keyCur]={
+              id_seguimiento:s.id,
+              ejecutado:s.estado==='ejecutado',
               fecha:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:'',
-              responsable:s.ejecutado_por||'',obs:''
+              responsable:s.ejecutado_por||'',obs:s.observacion||''
             };
-            dashCacheCur[s.id_programacion+'_'+s.mes]={
-              id_seguimiento:s.id_seguimiento,estado:s.estado,
+            dashCacheCur[s.programacion_id+'_'+(mi+1)]={
+              id_seguimiento:s.id,estado:s.estado,
               fecha_ejecucion:s.fecha_ejecucion?String(s.fecha_ejecucion).split('T')[0]:''
             };
           }
@@ -2541,6 +2552,8 @@ function openProgModal(id){
     document.getElementById('progAnio').value=new Date().getFullYear().toString();
     document.getElementById('progMonthsSection').style.display='none';
     if(bienId) document.getElementById('progBienSelModal').value=bienId;
+    var obsEl=document.getElementById('progObs');
+    if(obsEl) obsEl.value='';
   }
   openModal('progModal');
 }
