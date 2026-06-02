@@ -1791,6 +1791,7 @@ function renderDash(){
         });
       }
     }
+    _buildProgMonths(); // reconstruye pg.months antes de calcular totales
     _renderDashUI(y,bienes,dashMap,dashMapCur,dashCacheCur);
   }).catch(function(e){
     console.error('[renderDash]',e);
