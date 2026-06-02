@@ -3904,13 +3904,44 @@ function irASeguimDesdeF(bienId){
 // ============================================================
 let importData=null;
 function exportarJSON(){
-  const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;
-  a.download=`respaldo-mantenimiento-${new Date().toISOString().split('T')[0]}.json`;
-  a.click();URL.revokeObjectURL(url);
-  showToast('✅ Respaldo descargado');
+  showSpinner('Preparando respaldo...');
+  Promise.all([
+    sbFetch('bienes','GET',{select:'*'}),
+    sbFetch('programaciones','GET',{select:'*'}),
+    sbFetch('mantenimientos','GET',{select:'*'}),
+    sbFetch('usuarios','GET',{select:'*'}),
+    sbFetch('catalogos','GET',{select:'*'})
+  ]).then(function(results){
+    hideSpinner();
+    var respaldo={
+      version:'2.6.5.26',
+      fecha:new Date().toISOString(),
+      fuente:'Supabase',
+      bienes:results[0].ok?results[0].data:db.bienes,
+      programaciones:results[1].ok?results[1].data:db.programaciones,
+      mantenimientos:results[2].ok?results[2].data:db.seguimientos,
+      usuarios:results[3].ok?results[3].data:db.users,
+      catalogos:results[4].ok?results[4].data:[]
+    };
+    var blob=new Blob([JSON.stringify(respaldo,null,2)],{type:'application/json'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;
+    a.download='respaldo-scm-'+new Date().toISOString().split('T')[0]+'.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('✅ Respaldo descargado desde Supabase');
+  }).catch(function(){
+    hideSpinner();
+    var blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;
+    a.download='respaldo-scm-local-'+new Date().toISOString().split('T')[0]+'.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('⚠️ Respaldo local (sin conexión a Supabase)');
+  });
 }
 function previewImport(input){
   const file=input.files[0];if(!file)return;
@@ -3929,17 +3960,33 @@ function previewImport(input){
 }
 function confirmarImport(){
   if(!importData){showToast('⚠️ No hay archivo seleccionado');return;}
-  if(!confirm('¿Confirmar importación? Se perderán todos los datos actuales en memoria.'))return;
-  db=importData;
-  if(!db.users) db.users=[];
-  if(!db.programaciones) db.programaciones=[];
-  if(!db.bienes) db.bienes=[];
-  if(!db.mantMap) db.mantMap={};
+  if(!confirm(
+    'Esta importación cargará los datos en memoria de forma temporal.\n\n'+
+    'IMPORTANTE: Con Supabase como base de datos, los datos del respaldo '+
+    'NO se suben automáticamente a la nube. Para una restauración completa '+
+    'contacte al administrador del sistema.\n\n'+
+    '¿Continuar con la carga temporal en memoria?'
+  )) return;
+  if(Array.isArray(importData.bienes))
+    db.bienes=importData.bienes.map(function(r){
+      return typeof r.codigo!=='undefined'?mapBienFromSheet(r):r;
+    });
+  if(Array.isArray(importData.programaciones))
+    db.programaciones=importData.programaciones.map(function(r){
+      return typeof r.bien_id!=='undefined'?mapProgFromSheet(r):r;
+    });
+  if(Array.isArray(importData.mantenimientos))
+    db.seguimientos=importData.mantenimientos.map(function(r){
+      return typeof r.programacion_id!=='undefined'?mapMantFromSupabase(r):r;
+    });
+  if(Array.isArray(importData.usuarios))
+    db.users=importData.usuarios.map(mapUserFromSheet);
+  _buildProgMonths();
   importData=null;
   document.getElementById('importPreview').style.display='none';
   document.getElementById('importFile').value='';
   refreshAll();
-  showToast('✅ Datos importados en memoria (respaldo local)');
+  showToast('✅ Datos cargados en memoria (temporal)');
 }
 function exportarCSVBienes(){
   const bienes=bienesVisibles();
@@ -4425,22 +4472,42 @@ function actualizarBadgeSolicitudes(){
 function actualizarInfoConexion(){
   const el=document.getElementById('storageAlerta');
   if(el) el.style.display='none';
-  // Update storage info section to show API connection status
-  try{
-    const data=localStorage.getItem('scm_session')||'';
-    const usedBytes=new Blob([data]).size;
-    document.getElementById('storageUsed').textContent=`${(usedBytes/1024).toFixed(1)} KB`;
-    document.getElementById('storageFree').textContent='Ilimitado (Sheets)';
-    document.getElementById('storagePct').textContent='Cloud';
-    document.getElementById('storageUsedLabel').textContent='Datos en Google Sheets — sin límite local';
-    const bar=document.getElementById('storageBar');
-    if(bar){bar.style.width='4%';bar.className='progress-bar good';}
+  // Verificar conexión real a Supabase
+  sbFetch('bienes','GET',{select:'id',limit:'1'}).then(function(r){
+    try{
+      const session=localStorage.getItem('scm_session')||'';
+      const usedKB=(new Blob([session]).size/1024).toFixed(1);
+      document.getElementById('storageUsed').textContent=usedKB+' KB';
+      document.getElementById('storageFree').textContent='500 MB (plan gratuito)';
+      document.getElementById('storagePct').textContent='Cloud';
+      document.getElementById('storageUsedLabel').textContent=
+        'Datos en Supabase (PostgreSQL) — sin límite local';
+      const bar=document.getElementById('storageBar');
+      if(bar){bar.style.width='2%';bar.className='progress-bar good';}
+      const alerta=document.getElementById('storageAlerta');
+      if(alerta){
+        alerta.style.display='block';
+        if(r.ok){
+          alerta.innerHTML='<div class="alert alert-success">☁️ '+
+            '<strong>Conectado a Supabase.</strong> '+
+            'Los datos se guardan en la nube automáticamente. '+
+            'Base de datos: PostgreSQL · Plan gratuito (500 MB).</div>';
+        } else {
+          alerta.innerHTML='<div class="alert alert-warning">⚠️ '+
+            '<strong>Sin conexión a Supabase.</strong> '+
+            'Verifique su conexión a internet.</div>';
+        }
+      }
+    }catch(e){}
+  }).catch(function(){
     const alerta=document.getElementById('storageAlerta');
     if(alerta){
       alerta.style.display='block';
-      alerta.innerHTML='<div class="alert alert-success">☁️ <strong>Conectado a Google Sheets.</strong> Los datos se guardan en la nube automáticamente.</div>';
+      alerta.innerHTML='<div class="alert alert-warning">⚠️ '+
+        '<strong>Error al verificar conexión.</strong> '+
+        'Compruebe su conexión a internet.</div>';
     }
-  }catch(e){}
+  });
 }
 function calcularStorage(){actualizarInfoConexion();}
 
