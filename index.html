@@ -3045,6 +3045,7 @@ function renderReport(){
         }
       });
     }
+    _buildProgMonths(); // reconstruye pg.months antes de calcular totales del reporte
     _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,mesNum,cont,reportMap);
   }).catch(function(){
     _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,mesNum,cont,db.dashMap||{});
