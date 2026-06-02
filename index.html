@@ -2257,7 +2257,8 @@ function quickConfirm(progId,month){
     mes:month+1,anio:seg.anio,
     estado:seg.estado==='Ejecutado'?'ejecutado':'pendiente',
     fecha_ejecucion:seg.fecha_ejecucion||null,
-    ejecutado_por:seg.ejecutado_por||null,observacion:seg.observaciones||null};
+    ejecutado_por:seg.ejecutado_por||null,observacion:seg.observaciones||null,
+    costo_ejecutado:pg?pg.costo:0};
   var sbMethod=idExistente?'PATCH':'POST';
   var sbParams=idExistente?{id:'eq.'+idExistente}:{};
   showSpinner('Confirmando...');
@@ -2864,11 +2865,14 @@ function toggleMant(progId,month,done,bienId,anio){
     delegacion:currentUser.delegacion||''
   };
 
+  var pgTM=db.programaciones.find(function(p){return p.id===progId;});
+  var costoEjec=done?(pgTM?pgTM.costo:0):0;
   showSpinner(done?'Confirmando...':'Desmarcando...');
   var idEx=registroExistente?registroExistente.id_seguimiento:'';
   var sbSeg={programacion_id:progId,bien_id:bienId,mes:month+1,anio:seg.anio,
     estado:done?'ejecutado':'pendiente',fecha_ejecucion:done?seg.fecha_ejecucion:null,
-    ejecutado_por:done?seg.ejecutado_por:null,observacion:obsActual||null};
+    ejecutado_por:done?seg.ejecutado_por:null,observacion:obsActual||null,
+    costo_ejecutado:costoEjec};
   sbFetch('mantenimientos',idEx?'PATCH':'POST',idEx?{id:'eq.'+idEx}:{},sbSeg).then(function(r){
     hideSpinner();
     if(!r.ok){apiErr(r.error||'Error al guardar');return;}
@@ -2951,7 +2955,11 @@ function saveObs(progId,month,bienId,anio){
   var sbSegO={programacion_id:progId,bien_id:bienId,mes:month+1,anio:seg.anio,
     estado:rec.ejecutado?'ejecutado':'pendiente',
     fecha_ejecucion:seg.fecha_ejecucion||null,
-    ejecutado_por:seg.ejecutado_por||null,observacion:val};
+    ejecutado_por:seg.ejecutado_por||null,observacion:val,
+    costo_ejecutado:rec.costo_ejecutado||(function(){
+      var pgO=db.programaciones.find(function(x){return x.id===progId;});
+      return pgO?pgO.costo:0;
+    })()};
   sbFetch('mantenimientos',idExO?'PATCH':'POST',idExO?{id:'eq.'+idExO}:{},sbSegO).then(function(r){
     if(!r.ok){return;}
     var newIdO=idExO||(r.data&&r.data[0]&&r.data[0].id)||'';
