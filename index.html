@@ -3632,7 +3632,7 @@ function saveAdminReg(){
   showSpinner('Creando usuario...');
   var sbUser={usuario:userObj.usuario,password:userObj.password,
     nombre:userObj.nombre_completo,delegacion:userObj.delegacion,
-    rol:userObj.rol,activo:true};
+    rol:userObj.rol};
   sbFetch('usuarios','POST',{},sbUser).then(function(r){
     hideSpinner();
     if(!r.ok){apiErr((r.error&&r.error.message)||'Error al crear usuario');return;}
@@ -4349,7 +4349,7 @@ function aprobarSolicitud(idSol,rolKey){
   showSpinner('Aprobando solicitud...');
   // 1. Crear usuario en Supabase
   var newUser2={usuario:usuario,password:s.password_solicitada||'',
-    nombre:s.nombre_completo||s.nombre||'',rol:rol,delegacion:s.delegacion||'',activo:true};
+    nombre:s.nombre_completo||s.nombre||'',rol:rol,delegacion:s.delegacion||''};
   // 2. Marcar solicitud como aprobada
   var patchSol={estado:'Aprobado',revisado_por:currentUser.username,
     fecha_revision:new Date().toISOString().split('T')[0]};
