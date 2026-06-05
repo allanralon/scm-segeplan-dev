@@ -1486,6 +1486,12 @@ function sbFetch(tabla,method,params,body){
     })
     .catch(function(e){console.error('sbFetch error:',e);return {ok:false,error:e.message};});
 }
+// Registro de auditoría — fire-and-forget
+function registrarLog(accion,detalle,seccion){
+  var entry={usuario:currentUser?currentUser.username:'sistema',
+    accion:accion,detalle:detalle||'',seccion:seccion||''};
+  sbFetch('log','POST',{},entry).catch(function(){});
+}
 // Compatibilidad: la función api() ya no existe — usar sbFetch() directamente
 
 // ============================================================
@@ -1537,7 +1543,7 @@ function doLogin(){
   var p=document.getElementById('loginPass').value;
   if(!u||!p){document.getElementById('loginErr').style.display='block';return;}
   showSpinner('Verificando credenciales...');
-  sbFetch('usuarios','GET',{usuario:'eq.'+u,password:'eq.'+p,select:'*'})
+  sbFetch('usuarios','GET',{usuario:'eq.'+u,password:'eq.'+p,activo:'eq.true',select:'*'})
     .then(function(result){
       hideSpinner();
       if(!result.ok||!Array.isArray(result.data)||result.data.length===0){
@@ -1552,6 +1558,7 @@ function doLogin(){
         delegacion:d.delegacion||''
       };
       localStorage.setItem('scm_session',JSON.stringify(currentUser));
+      registrarLog('login','Sesión iniciada','login');
       _applyLogin(currentUser);
     }).catch(function(){hideSpinner();apiErr('No se pudo conectar con el servidor.');});
 }
@@ -1593,6 +1600,7 @@ function _applyLogin(user){
   });
 }
 function doLogout(){
+  registrarLog('logout','Sesión cerrada','login');
   currentUser=null;
   localStorage.removeItem('scm_session');
   db.bienes=[];db.programaciones=[];db.seguimientos=[];db.users=[];
@@ -2407,6 +2415,7 @@ function quickConfirm(progId,month){
     db.dashMap[progId+'_'+month]={id_seguimiento:id,ejecutado:true,fecha:seg.fecha_ejecucion,responsable:currentUser.username,obs:''};
     if(!db.dashCache) db.dashCache={};
     db.dashCache[cacheKey]={id_seguimiento:id,estado:'Ejecutado',fecha_ejecucion:seg.fecha_ejecucion};
+    registrarLog('confirmar_rapido','Confirmación rápida - prog:'+progId+' mes:'+(month+1),'panel');
     showToast('✔ Mantenimiento confirmado');
     renderDash();
   }).catch(function(){hideSpinner();apiErr();});
@@ -2514,7 +2523,9 @@ function deleteBien(id){
     db.bienes=db.bienes.filter(b=>b.id!==id);
     db.programaciones=db.programaciones.filter(p=>p.bienId!==id);
     if(db.seguimientos) db.seguimientos=db.seguimientos.filter(s=>s.bien_id!==id);
-    renderBienes();renderDash();showToast('🗑️ Bien eliminado');
+    renderBienes();renderDash();
+    showToast('🗑️ Bien eliminado');
+    registrarLog('eliminar_bien','Bien eliminado: '+id,'bienes');
   }).catch(function(){hideSpinner();apiErr();});
 }
 function saveBien(){
@@ -2557,6 +2568,8 @@ function saveBien(){
       if(r2.ok&&Array.isArray(r2.data)) db.bienes=r2.data.map(mapBienFromSheet);
       closeModal('bienModal');
       renderBienes();renderDash();
+      var _logBien=editingBienId?'editar_bien':'crear_bien';
+      registrarLog(_logBien,(editingBienId?'Bien editado: ':'Bien creado: ')+codigo,'bienes');
       showToast(editingBienId?'✅ Bien actualizado':'✅ Bien registrado');
       editingBienId=null;
       bFotoData=null;
@@ -2815,6 +2828,7 @@ function saveProg(){
           closeModal('progModal');
           document.getElementById('progBienSel').value=bienId;
           renderProgDetalle();renderDash();
+          registrarLog('crear_programacion','Programación creada para bien: '+bienId,'programacion');
           showToast('✅ Programación guardada');
         });
       }
@@ -2866,7 +2880,9 @@ function deleteProg(id){
     hideSpinner();
     if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
     db.programaciones=db.programaciones.filter(p=>p.id!==id);
-    renderProgDetalle();renderDash();showToast('🗑️ Programación eliminada');
+    renderProgDetalle();renderDash();
+    showToast('🗑️ Programación eliminada');
+    registrarLog('eliminar_programacion','Programación eliminada: '+id,'programacion');
   }).catch(function(){hideSpinner();apiErr();});
 }
 
@@ -3042,6 +3058,9 @@ function toggleMant(progId,month,done,bienId,anio){
         delegacion:seg.delegacion
       });
     }
+    (done
+      ?registrarLog('confirmar_mantenimiento','Mantenimiento confirmado - prog:'+progId+' mes:'+(month+1),'seguimiento')
+      :registrarLog('desmarcar_mantenimiento','Mantenimiento desmarcado - prog:'+progId+' mes:'+(month+1),'seguimiento'));
     showToast(done?'\u2714 Mantenimiento confirmado':'\u21a9 Mantenimiento desmarcado');
     renderMant();renderDash();
   }).catch(function(){hideSpinner();apiErr();});
@@ -3657,18 +3676,38 @@ function exportarPDF(){
 // USUARIOS
 // ============================================================
 function renderUsers(){
-  const tb=document.getElementById('usersTable');
-  const rolBadge={admin:'badge-red',editor:'badge-blue'};
-  tb.innerHTML=db.users.map(u=>`<tr>
-    <td style="font-family:var(--mono);font-size:.82rem;">${u.username}</td>
-    <td>${u.nombre||'—'}</td>
-    <td>${u.delegacion?`<span class="badge badge-blue">${u.delegacion}</span>`:'<span class="badge badge-gray">—</span>'}</td>
-    <td><span class="badge ${rolBadge[u.rol]||'badge-gray'}">${u.rol}</span></td>
-    <td><div class="actions">
-      <button class="btn-icon btn-icon-edit" onclick="openEditUserModal('${u.username}')" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-      ${u.username!=='admin'?`<button class="btn-icon btn-icon-del" onclick="deleteUser('${u.username}')" title="Eliminar"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>`:''}
-    </div></td>
-  </tr>`).join('');
+  var tb=document.getElementById('usersTable');
+  var rolBadge={admin:'badge-red',editor:'badge-blue'};
+  tb.innerHTML=db.users.map(function(u){
+    var activo=(u.activo===false)?false:true;
+    var estadoBadge=activo
+      ?'<span class="badge badge-green" style="font-size:.68rem;">Activo</span>'
+      :'<span class="badge badge-red" style="font-size:.68rem;">Inactivo</span>';
+    var btnAccion='';
+    if(u.username!=='admin'){
+      if(activo){
+        btnAccion='<button class="btn-icon btn-icon-del" onclick="deleteUser(\''+u.username+'\')" title="Desactivar">'
+          +'<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'
+          +'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>';
+      } else {
+        btnAccion='<button class="btn btn-success btn-sm" onclick="reactivarUser(\''+u.username+'\')" '
+          +'style="font-size:.7rem;padding:3px 8px;">Reactivar</button>';
+      }
+    }
+    return '<tr>'
+      +'<td style="font-family:var(--mono);font-size:.82rem;">'+u.username+'</td>'
+      +'<td>'+(u.nombre||'—')+'</td>'
+      +'<td>'+(u.delegacion?'<span class="badge badge-blue">'+u.delegacion+'</span>':'<span class="badge badge-gray">—</span>')+'</td>'
+      +'<td><span class="badge '+(rolBadge[u.rol]||'badge-gray')+'">'+u.rol+'</span></td>'
+      +'<td>'+estadoBadge+'</td>'
+      +'<td><div class="actions">'
+        +'<button class="btn-icon btn-icon-edit" onclick="openEditUserModal(\''+u.username+'\')" title="Editar">'
+        +'<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'
+        +'<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>'
+        +btnAccion
+        +'</div></td>'
+    +'</tr>';
+  }).join('');
 }
 function openSelfRegModal(){
   ['srUsername','srPassword','srNombre'].forEach(function(f){document.getElementById(f).value='';});
@@ -3774,17 +3813,22 @@ function saveAdminReg(){
     hideSpinner();
     if(!r.ok){apiErr((r.error&&r.error.message)||'Error al crear usuario');return;}
     db.users.push(mapUserFromSheet(sbUser));
-    closeModal('adminRegModal');renderUsers();showToast('✅ Usuario creado');
+    closeModal('adminRegModal');renderUsers();
+    registrarLog('crear_usuario','Usuario creado: '+sbUser.usuario,'usuarios');
+    showToast('✅ Usuario creado');
   }).catch(function(){hideSpinner();apiErr();});
 }
 function deleteUser(username){
-  if(!confirm('¿Eliminar este usuario?'))return;
-  showSpinner('Eliminando...');
-  sbFetch('usuarios','DELETE',{usuario:'eq.'+username}).then(function(r){
+  if(!confirm('¿Desactivar este usuario?\n\n'
+    +'El usuario no podrá iniciar sesión pero sus registros se conservarán.'))return;
+  showSpinner('Desactivando...');
+  sbFetch('usuarios','PATCH',{usuario:'eq.'+username},{activo:false}).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
-    db.users=db.users.filter(u=>u.username!==username);
-    renderUsers();showToast('🗑️ Usuario eliminado');
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al desactivar');return;}
+    db.users=db.users.map(function(u){if(u.username===username)u.activo=false;return u;});
+    renderUsers();
+    registrarLog('desactivar_usuario','Usuario desactivado: '+username,'usuarios');
+    showToast('⚠️ Usuario desactivado');
   }).catch(function(){hideSpinner();apiErr();});
 }
 function openEditUserModal(username){
@@ -3847,20 +3891,35 @@ function saveEditUser(){
       document.getElementById('currentUserDepto').textContent=currentUser.delegacion?`· ${currentUser.delegacion}`:'';
     }
     closeModal('editUserModal');renderUsers();
+    registrarLog('editar_usuario','Usuario editado: '+origUser,'usuarios');
     showToast('✅ Usuario actualizado correctamente');
   }).catch(function(){hideSpinner();apiErr();});
 }
 function deleteUserFromModal(){
   const username=document.getElementById('euOriginalUsername').value;
-  if(username==='admin'){showToast('⚠️ No se puede eliminar el administrador principal');return;}
-  if(!confirm(`¿Eliminar al usuario "${username}"? Esta acción no se puede deshacer.`))return;
-  showSpinner('Eliminando...');
-  sbFetch('usuarios','DELETE',{usuario:'eq.'+username}).then(function(r){
+  if(username==='admin'){showToast('⚠️ No se puede desactivar el administrador principal');return;}
+  if(!confirm('¿Desactivar al usuario "'+username+'"?\n\n'
+    +'El usuario no podrá iniciar sesión pero sus registros se conservarán.'))return;
+  showSpinner('Desactivando...');
+  sbFetch('usuarios','PATCH',{usuario:'eq.'+username},{activo:false}).then(function(r){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
-    db.users=db.users.filter(u=>u.username!==username);
+    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al desactivar');return;}
+    db.users=db.users.map(function(u){if(u.username===username)u.activo=false;return u;});
     closeModal('editUserModal');renderUsers();
-    showToast('🗑️ Usuario eliminado');
+    registrarLog('desactivar_usuario','Usuario desactivado: '+username,'usuarios');
+    showToast('⚠️ Usuario desactivado');
+  }).catch(function(){hideSpinner();apiErr();});
+}
+function reactivarUser(username){
+  if(!confirm('¿Reactivar este usuario?\n\nEl usuario podrá volver a iniciar sesión.'))return;
+  showSpinner('Reactivando...');
+  sbFetch('usuarios','PATCH',{usuario:'eq.'+username},{activo:true}).then(function(r){
+    hideSpinner();
+    if(!r.ok){apiErr();return;}
+    db.users=db.users.map(function(u){if(u.username===username)u.activo=true;return u;});
+    renderUsers();
+    registrarLog('reactivar_usuario','Usuario reactivado: '+username,'usuarios');
+    showToast('✅ Usuario reactivado');
   }).catch(function(){hideSpinner();apiErr();});
 }
 
@@ -4067,6 +4126,7 @@ function exportarJSON(){
     a.download='respaldo-scm-'+new Date().toISOString().split('T')[0]+'.json';
     a.click();
     URL.revokeObjectURL(url);
+    registrarLog('exportar_respaldo','Respaldo JSON descargado','datos');
     showToast('✅ Respaldo descargado desde Supabase');
   }).catch(function(){
     hideSpinner();
@@ -4126,12 +4186,14 @@ function confirmarImport(){
   showToast('✅ Datos cargados en memoria (temporal)');
 }
 function exportarCSVBienes(){
+  registrarLog('exportar_csv_bienes','CSV de bienes descargado','datos');
   const bienes=bienesVisibles();
   const headers=['Código','Tipo','Marca','Serie','Año','Precio','Clasificación','Renglón','Descripción','Delegación'];
   const rows=bienes.map(b=>[b.codigo,b.tipo,b.marca,b.serie||'',b.anio||'',b.precio||0,b.clasificacion||'',b.renglon||'',`"${(b.desc||'').replace(/"/g,"'")}"`,b.delegacion||''].join(','));
   descargarCSV([headers.join(','),...rows].join('\n'),'bienes');
 }
 function exportarCSVMant(){
+  registrarLog('exportar_csv_mantenimientos','CSV de mantenimientos descargado','datos');
   const year=parseInt(document.getElementById('reportYear').value)||new Date().getFullYear();
   const headers=['Código Bien','Tipo Bien','Marca','Modelo','Tipo Mantenimiento','Año','Mes','Estado','Fecha Ejecución','Responsable','Observaciones'];
   const rows=[];
@@ -4555,6 +4617,7 @@ function aprobarSolicitud(idSol,rolKey){
     if(results[0].ok&&Array.isArray(results[0].data)) db.users=results[0].data.map(mapUserFromSheet);
     if(results[1].ok&&Array.isArray(results[1].data)) db.solicitudes=results[1].data;
     actualizarBadgeSolicitudes();renderUsers();renderSolicitudes();
+    registrarLog('aprobar_solicitud','Solicitud aprobada: '+usuario,'usuarios');
     showToast('✅ Usuario "'+(s.nombre_completo||s.nombre)+'" aprobado como '+rol);
   }).catch(function(){
     hideSpinner();
@@ -4581,6 +4644,7 @@ function rechazarSolicitud(idSol){
     if(!r2) return;
     if(r2.ok&&Array.isArray(r2.data)) db.solicitudes=r2.data;
     actualizarBadgeSolicitudes();renderSolicitudes();
+    registrarLog('rechazar_solicitud','Solicitud rechazada: '+idSol,'usuarios');
     showToast('🗑️ Solicitud rechazada');
   }).catch(function(){
     hideSpinner();
@@ -4664,3 +4728,14 @@ document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='
 </script>
 </body>
 </html>
+
+<!--
+=== SQL: Columna activo en tabla usuarios — ejecutar UNA VEZ en Supabase SQL Editor ===
+
+ALTER TABLE usuarios
+ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT true;
+
+UPDATE usuarios SET activo = true WHERE activo IS NULL;
+
+=== FIN SQL ===
+-->
