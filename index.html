@@ -1275,7 +1275,7 @@ td:has(.actions){white-space:nowrap;width:1px;}
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-danger btn-sm" id="euDeleteBtn" onclick="deleteUserFromModal()">Eliminar</button>
+      <button class="btn btn-warning btn-sm" id="euDeleteBtn" onclick="deleteUserFromModal()">Inactivar</button>
       <div style="flex:1;"></div>
       <button class="btn btn-outline" onclick="closeModal('editUserModal')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveEditUser()">Guardar Cambios</button>
@@ -1731,13 +1731,14 @@ function mapProgToSheet(pg){
   };
 }
 function mapUserFromSheet(r){
-  // Supabase: id, usuario, password, nombre, rol, delegacion
+  // Supabase: id, usuario, password, nombre, rol, delegacion, activo
   return {
     username:r.usuario,
     nombre:r.nombre||r.usuario,
     password:r.password||'',
     rol:r.rol||'editor',
-    delegacion:r.delegacion||''
+    delegacion:r.delegacion||'',
+    activo:r.activo!==false  // true si null/undefined (por defecto activo)
   };
 }
 function mapMantFromSupabase(r){
@@ -3679,19 +3680,24 @@ function renderUsers(){
   var tb=document.getElementById('usersTable');
   var rolBadge={admin:'badge-red',editor:'badge-blue'};
   tb.innerHTML=db.users.map(function(u){
-    var activo=(u.activo===false)?false:true;
-    var estadoBadge=activo
+    var esActivo=u.activo!==false;
+    var estadoBadge=esActivo
       ?'<span class="badge badge-green" style="font-size:.68rem;">Activo</span>'
       :'<span class="badge badge-red" style="font-size:.68rem;">Inactivo</span>';
     var btnAccion='';
     if(u.username!=='admin'){
-      if(activo){
-        btnAccion='<button class="btn-icon btn-icon-del" onclick="deleteUser(\''+u.username+'\')" title="Desactivar">'
-          +'<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'
-          +'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>';
+      if(esActivo){
+        // Botón Inactivar — naranja, sin ícono de papelera
+        btnAccion='<button onclick="deleteUser(\''+u.username+'\')" '
+          +'style="padding:3px 10px;font-size:.72rem;font-weight:600;cursor:pointer;border-radius:var(--radius-sm);'
+          +'border:1.5px solid var(--warning);background:var(--warning-light);color:var(--warning);'
+          +'white-space:nowrap;" title="Inactivar usuario">Inactivar</button>';
       } else {
-        btnAccion='<button class="btn btn-success btn-sm" onclick="reactivarUser(\''+u.username+'\')" '
-          +'style="font-size:.7rem;padding:3px 8px;">Reactivar</button>';
+        // Botón Activar — verde
+        btnAccion='<button onclick="reactivarUser(\''+u.username+'\')" '
+          +'style="padding:3px 10px;font-size:.72rem;font-weight:600;cursor:pointer;border-radius:var(--radius-sm);'
+          +'border:1.5px solid var(--success);background:var(--success-light);color:var(--success);'
+          +'white-space:nowrap;" title="Activar usuario">Activar</button>';
       }
     }
     return '<tr>'
