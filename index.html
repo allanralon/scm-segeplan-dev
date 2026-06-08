@@ -628,6 +628,7 @@ td:has(.actions){white-space:nowrap;width:1px;}
 }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
 </head>
 </head>
 <body>
@@ -1156,6 +1157,10 @@ td:has(.actions){white-space:nowrap;width:1px;}
         </div>
       </div>
       <div class="form-group">
+        <label>Email (opcional)</label>
+        <input type="email" id="srEmail" placeholder="correo@institucion.gob.gt"/>
+      </div>
+      <div class="form-group">
         <label>Nombre completo *</label>
         <input type="text" id="srNombre" placeholder="ej. Juan Pérez García"/>
       </div>
@@ -1194,6 +1199,10 @@ td:has(.actions){white-space:nowrap;width:1px;}
           <label>Contraseña *</label>
           <input type="password" id="arPassword" placeholder="••••••••"/>
         </div>
+      </div>
+      <div class="form-group">
+        <label>Email (opcional)</label>
+        <input type="email" id="arEmail" placeholder="correo@institucion.gob.gt"/>
       </div>
       <div class="form-group">
         <label>Nombre completo *</label>
@@ -1262,6 +1271,10 @@ td:has(.actions){white-space:nowrap;width:1px;}
             <option value="admin">Administrador</option>
           </select>
         </div>
+      </div>
+      <div class="form-group">
+        <label>Email (opcional)</label>
+        <input type="email" id="euEmail" placeholder="correo@institucion.gob.gt"/>
       </div>
       <div class="sep"></div>
       <div style="background:var(--bg);border-radius:var(--radius);padding:14px;">
@@ -1492,6 +1505,21 @@ function registrarLog(accion,detalle,seccion){
     accion:accion,detalle:detalle||'',seccion:seccion||''};
   sbFetch('log','POST',{},entry).catch(function(){});
 }
+function generarPassword(longitud){
+  longitud=longitud||10;
+  var chars='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$%';
+  var pass='';
+  for(var i=0;i<longitud;i++) pass+=chars.charAt(Math.floor(Math.random()*chars.length));
+  return pass;
+}
+function hashPassword(password){
+  var salt=dcodeIO.bcrypt.genSaltSync(10);
+  return dcodeIO.bcrypt.hashSync(password,salt);
+}
+function verificarPassword(password,hash){
+  if(!hash||!hash.startsWith('$2')) return password===hash; // legacy plain text
+  return dcodeIO.bcrypt.compareSync(password,hash);
+}
 // Compatibilidad: la función api() ya no existe — usar sbFetch() directamente
 
 // ============================================================
@@ -1543,7 +1571,7 @@ function doLogin(){
   var p=document.getElementById('loginPass').value;
   if(!u||!p){document.getElementById('loginErr').style.display='block';return;}
   showSpinner('Verificando credenciales...');
-  sbFetch('usuarios','GET',{usuario:'eq.'+u,password:'eq.'+p,activo:'eq.true',select:'*'})
+  sbFetch('usuarios','GET',{usuario:'eq.'+u,activo:'eq.true',select:'*'})
     .then(function(result){
       hideSpinner();
       if(!result.ok||!Array.isArray(result.data)||result.data.length===0){
@@ -1551,6 +1579,10 @@ function doLogin(){
         return;
       }
       var d=result.data[0];
+      if(!verificarPassword(p,d.password)){
+        document.getElementById('loginErr').style.display='block';
+        return;
+      }
       var token=d.usuario+'_'+Date.now()+'_'+Math.random().toString(36).substr(2,16);
       // Guardar token en Supabase — fire-and-forget
       sbFetch('usuarios','PATCH',{usuario:'eq.'+d.usuario},{session_token:token}).catch(function(){});
@@ -3813,10 +3845,12 @@ function saveSelfReg(){
   };
   showSpinner('Enviando solicitud...');
   // Insertar solicitud directamente en tabla solicitudes
+  var emailSR=document.getElementById('srEmail')?document.getElementById('srEmail').value.trim():'';
   var sbSol={usuario_solicitado:payload.usuario_solicitado,
-    password_solicitada:payload.password_solicitada,
+    password_solicitada:hashPassword(payload.password_solicitada),
     nombre_completo:payload.nombre_completo,
     delegacion:payload.delegacion,motivo:payload.motivo||null,
+    email:emailSR||null,
     estado:'Pendiente',fecha_solicitud:new Date().toISOString()};
   sbFetch('solicitudes','POST',{},sbSol).then(function(r){
     hideSpinner();
@@ -3869,25 +3903,19 @@ function openAdminRegModal(){
 }
 function saveAdminReg(){
   const u=document.getElementById('arUsername').value.trim().toLowerCase();
-  const p=document.getElementById('arPassword').value;
   const n=document.getElementById('arNombre').value.trim();
   const d=document.getElementById('arDepto').value;
   const r=document.getElementById('arRol').value;
-  if(!u||!p||!n||!d){showToast('⚠️ Complete todos los campos');return;}
-  const userObj={
-    usuario:u,
-    password:p,
-    nombre_completo:n,
-    delegacion:d,
-    rol:r,
-    activo:true,
-    fecha_creacion:new Date().toISOString(),
-    creado_por:currentUser.username
-  };
+  var passInput=document.getElementById('arPassword').value;
+  var emailInput=document.getElementById('arEmail')?document.getElementById('arEmail').value.trim():'';
+  if(!u||!n||!d){showToast('⚠️ Complete todos los campos');return;}
+  var passFinal=passInput||generarPassword(10);
+  if(!passInput) alert('Contraseña generada para '+u+':\n\n'+passFinal+'\n\nGuárdela para compartirla con el usuario.');
+  var passHash=hashPassword(passFinal);
   showSpinner('Creando usuario...');
-  var sbUser={usuario:userObj.usuario,password:userObj.password,
-    nombre:userObj.nombre_completo,delegacion:userObj.delegacion,
-    rol:userObj.rol};
+  var sbUser={usuario:u,password:passHash,
+    nombre:n,delegacion:d,rol:r,
+    email:emailInput||null};
   sbFetch('usuarios','POST',{},sbUser).then(function(r){
     hideSpinner();
     if(!r.ok){apiErr((r.error&&r.error.message)||'Error al crear usuario');return;}
@@ -3924,6 +3952,8 @@ function openEditUserModal(username){
   document.getElementById('euInfoPass').textContent=u.password?'••••••••':'—';
   document.getElementById('euDeleteBtn').style.display=username==='admin'?'none':'inline-flex';
   cargarDelegacionesEnSelect('euDepto',u.delegacion||'');
+  var emailEl=document.getElementById('euEmail');
+  if(emailEl) emailEl.value=u.email||'';
   openModal('editUserModal');
 }
 function saveEditUser(){
@@ -3948,7 +3978,9 @@ function saveEditUser(){
   // PATCH por usuario original
   var sbPatch={usuario:userObj.usuario,nombre:userObj.nombre_completo,
     delegacion:userObj.delegacion,rol:userObj.rol};
-  if(userObj.password) sbPatch.password=userObj.password;
+  if(userObj.password) sbPatch.password=hashPassword(userObj.password);
+  var emailEdit=document.getElementById('euEmail');
+  if(emailEdit) sbPatch.email=emailEdit.value.trim()||null;
   sbFetch('usuarios','PATCH',{usuario:'eq.'+origUser},sbPatch).then(function(r){
     hideSpinner();
     if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar');return;}
@@ -4572,24 +4604,31 @@ function recuperarPass(){
   document.getElementById('recResult').style.display='none';
   document.getElementById('recNotFound').style.display='none';
   showSpinner('Buscando cuenta...');
-  sbFetch('usuarios','GET',{usuario:'eq.'+u,select:'usuario,nombre,delegacion'}).then(function(result){
+  sbFetch('usuarios','GET',{usuario:'eq.'+u,activo:'eq.true',
+    select:'usuario,nombre,delegacion,email'}).then(function(result){
     hideSpinner();
     if(!result.ok||!result.data||result.data.length===0){
       document.getElementById('recNotFound').style.display='block';return;
     }
-    const user=result.data[0];
+    var d=result.data[0];
+    var emailInfo=d.email
+      ?'Email registrado: <strong>'+d.email+'</strong>'
+      :'Sin email registrado. Contacte al administrador.';
     document.getElementById('recResultMsg').innerHTML=
-      'Usuario encontrado: <strong>'+(user.nombre||user.usuario)+'</strong><br>'+
-      'Delegación: <strong>'+(user.delegacion||'—')+'</strong><br>'+
-      '<em style="font-size:.8rem;color:var(--text-secondary);">Contacte al administrador para recuperar su contraseña.</em>';
+      '<div style="background:var(--success-light);border:1px solid var(--success);border-radius:var(--radius-sm);padding:12px;font-size:.85rem;">'
+      +'<strong>Usuario encontrado:</strong> '+d.nombre
+      +'<br><strong>Delegación:</strong> '+(d.delegacion||'')
+      +'<br>'+emailInfo
+      +'<br><br><em style="color:var(--text-secondary);">Contacte al administrador para restablecer su contraseña.</em>'
+      +'</div>';
     document.getElementById('recResult').style.display='block';
   }).catch(function(){
     hideSpinner();
-    const user=db.users.find(x=>x.username===u);
+    var user=db.users.find(x=>x.username===u);
     if(!user){document.getElementById('recNotFound').style.display='block';return;}
     document.getElementById('recResultMsg').innerHTML=
-      'Usuario encontrado: <strong>'+(user.nombre||user.username)+'</strong><br>'+
-      'Delegación: <strong>'+(user.delegacion||'—')+'</strong>';
+      'Usuario encontrado: <strong>'+(user.nombre||user.username)+'</strong><br>'
+      +'Delegación: <strong>'+(user.delegacion||'—')+'</strong>';
     document.getElementById('recResult').style.display='block';
   });
 }
@@ -4673,8 +4712,10 @@ function aprobarSolicitud(idSol,rolKey){
   }
   showSpinner('Aprobando solicitud...');
   // 1. Crear usuario en Supabase
-  var newUser2={usuario:usuario,password:s.password_solicitada||'',
-    nombre:s.nombre_completo||s.nombre||'',rol:rol,delegacion:s.delegacion||''};
+  var newUser2={usuario:usuario,
+    password:s.password_solicitada||'',  // ya viene hasheada desde saveSelfReg
+    nombre:s.nombre_completo||s.nombre||'',rol:rol,delegacion:s.delegacion||'',
+    email:s.email||null};
   // 2. Marcar solicitud como aprobada
   var patchSol={estado:'Aprobado',revisado_por:currentUser.username,
     fecha_revision:new Date().toISOString().split('T')[0]};
