@@ -1551,12 +1551,15 @@ function doLogin(){
         return;
       }
       var d=result.data[0];
+      var token=d.usuario+'_'+Date.now()+'_'+Math.random().toString(36).substr(2,16);
+      // Guardar token en Supabase — fire-and-forget
+      sbFetch('usuarios','PATCH',{usuario:'eq.'+d.usuario},{session_token:token}).catch(function(){});
       currentUser={
         username:d.usuario,
         nombre:d.nombre||d.usuario,
         rol:d.rol||'editor',
         delegacion:d.delegacion||'',
-        sessionToken:d.usuario+'_'+Date.now()+'_'+Math.random().toString(36).substr(2,9)
+        sessionToken:token
       };
       localStorage.setItem('scm_session',JSON.stringify(currentUser));
       registrarLog('login','Sesión iniciada','login');
@@ -1601,6 +1604,10 @@ function _applyLogin(user){
   });
 }
 function doLogout(){
+  // Limpiar token en Supabase — fire-and-forget
+  if(currentUser&&currentUser.username){
+    sbFetch('usuarios','PATCH',{usuario:'eq.'+currentUser.username},{session_token:null}).catch(function(){});
+  }
   registrarLog('logout','Sesión cerrada','login');
   currentUser=null;
   localStorage.removeItem('scm_session');
@@ -4723,36 +4730,20 @@ function calcularStorage(){actualizarInfoConexion();}
 // INIT
 // ============================================================
 loadDB();
-// Verificar sesión — fase 2: token + Supabase
-if(currentUser){
-  // Paso 1: verificar token local sin red
-  var tokenValido=false;
-  if(currentUser.sessionToken){
-    var _partes=currentUser.sessionToken.split('_');
-    if(_partes.length>=2){
-      var _ts=parseInt(_partes[1]);
-      var _horas=(Date.now()-_ts)/(1000*60*60);
-      tokenValido=!isNaN(_ts)&&_horas<8;
-    }
-  }
-  if(!tokenValido){
-    // Token inválido, manipulado o expirado — bloquear sin llamar Supabase
-    localStorage.removeItem('scm_session');
-    currentUser=null;
-    document.getElementById('loginScreen').style.display='flex';
-    document.getElementById('app').style.display='none';
-  } else {
-    // Paso 2: token válido — verificar además contra Supabase
-    showSpinner('Verificando sesión...');
-    sbFetch('usuarios','GET',{
-      usuario:'eq.'+currentUser.username,
-      activo:'eq.true',
-      select:'usuario,nombre,rol,delegacion,activo'
-    }).then(function(r){
-      hideSpinner();
-      if(r.ok&&Array.isArray(r.data)&&r.data.length>0){
-        // Regenerar currentUser con datos frescos de Supabase
-        var d=r.data[0];
+// Verificar sesión — fase 3: token vs session_token en Supabase
+if(currentUser&&currentUser.sessionToken){
+  showSpinner('Verificando sesión...');
+  sbFetch('usuarios','GET',{
+    usuario:'eq.'+currentUser.username,
+    activo:'eq.true',
+    select:'usuario,nombre,rol,delegacion,session_token'
+  }).then(function(r){
+    hideSpinner();
+    if(r.ok&&Array.isArray(r.data)&&r.data.length>0){
+      var d=r.data[0];
+      // Comparar token local vs token almacenado en Supabase
+      if(d.session_token&&d.session_token===currentUser.sessionToken){
+        // Token coincide — sesión válida
         currentUser={
           username:d.usuario,
           nombre:d.nombre||d.usuario,
@@ -4763,21 +4754,33 @@ if(currentUser){
         localStorage.setItem('scm_session',JSON.stringify(currentUser));
         _applyLogin(currentUser);
       } else {
+        // Token no coincide — sesión inválida o manipulada
         localStorage.removeItem('scm_session');
         currentUser=null;
         document.getElementById('loginScreen').style.display='flex';
         document.getElementById('app').style.display='none';
       }
-    }).catch(function(){
-      hideSpinner();
-      // Sin conexión — limpiar sesión por seguridad
+    } else {
+      // Usuario no encontrado o inactivo
       localStorage.removeItem('scm_session');
       currentUser=null;
       document.getElementById('loginScreen').style.display='flex';
       document.getElementById('app').style.display='none';
-      showToast('⚠️ Sin conexión. Inicie sesión nuevamente.');
-    });
-  }
+    }
+  }).catch(function(){
+    hideSpinner();
+    localStorage.removeItem('scm_session');
+    currentUser=null;
+    document.getElementById('loginScreen').style.display='flex';
+    document.getElementById('app').style.display='none';
+    showToast('⚠️ Sin conexión. Inicie sesión nuevamente.');
+  });
+} else {
+  // Sin sesión o sin token — mostrar login directamente
+  localStorage.removeItem('scm_session');
+  currentUser=null;
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('app').style.display='none';
 }
 // Poblar selectores de año con rango dinámico al cargar
 poblarSelectAnios();
@@ -4789,12 +4792,15 @@ document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='
 </html>
 
 <!--
-=== SQL: Columna activo en tabla usuarios — ejecutar UNA VEZ en Supabase SQL Editor ===
+=== SQL: Columnas adicionales en tabla usuarios — ejecutar UNA VEZ en Supabase SQL Editor ===
 
 ALTER TABLE usuarios
 ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT true;
 
 UPDATE usuarios SET activo = true WHERE activo IS NULL;
+
+ALTER TABLE usuarios
+ADD COLUMN IF NOT EXISTS session_token TEXT;
 
 === FIN SQL ===
 -->
