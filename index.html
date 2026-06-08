@@ -3930,14 +3930,31 @@ function saveAdminReg(){
   var sbUser={usuario:u,password:passHash,
     nombre:n,delegacion:d,rol:r,
     email:emailInput||null};
-  sbFetch('usuarios','POST',{},sbUser).then(function(r){
+  // Usar RPC crear_usuario para no exponer hash ni bypassar RLS
+  fetch(SUPABASE_URL+'/rest/v1/rpc/crear_usuario',{
+    method:'POST',
+    headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'},
+    body:JSON.stringify({
+      p_usuario:sbUser.usuario,
+      p_password:sbUser.password,
+      p_nombre:sbUser.nombre,
+      p_rol:sbUser.rol,
+      p_delegacion:sbUser.delegacion,
+      p_email:sbUser.email||null
+    })
+  }).then(function(r){return r.json();})
+  .then(function(data){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al crear usuario');return;}
-    db.users.push(mapUserFromSheet(sbUser));
-    closeModal('adminRegModal');renderUsers();
-    registrarLog('crear_usuario','Usuario creado: '+sbUser.usuario,'usuarios');
-    showToast('✅ Usuario creado');
-  }).catch(function(){hideSpinner();apiErr();});
+    if(data&&data.code){apiErr(data.message||'Error al crear usuario');return;}
+    // Recargar usuarios desde Supabase
+    sbFetch('usuarios','GET',{select:'*'}).then(function(ru){
+      if(ru.ok&&Array.isArray(ru.data)) db.users=ru.data.map(mapUserFromSheet);
+      closeModal('adminRegModal');
+      renderUsers();
+      registrarLog('crear_usuario','Usuario creado: '+sbUser.usuario,'usuarios');
+      showToast('✅ Usuario creado correctamente');
+    });
+  }).catch(function(){hideSpinner();apiErr('Error al crear usuario');});
 }
 function deleteUser(username){
   if(!confirm('¿Desactivar este usuario?\n\n'
@@ -4733,9 +4750,23 @@ function aprobarSolicitud(idSol,rolKey){
   // 2. Marcar solicitud como aprobada
   var patchSol={estado:'Aprobado',revisado_por:currentUser.username,
     fecha_revision:new Date().toISOString().split('T')[0]};
-  sbFetch('usuarios','POST',{},newUser2).then(function(r){
+  // Usar RPC crear_usuario para no bypassar RLS
+  fetch(SUPABASE_URL+'/rest/v1/rpc/crear_usuario',{
+    method:'POST',
+    headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'},
+    body:JSON.stringify({
+      p_usuario:newUser2.usuario,
+      p_password:newUser2.password,
+      p_nombre:newUser2.nombre,
+      p_rol:newUser2.rol,
+      p_delegacion:newUser2.delegacion,
+      p_email:newUser2.email||null
+    })
+  }).then(function(r){return r.json();})
+  .then(function(data){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al crear usuario');return;}
+    if(data&&data.code){apiErr(data.message||'Error al aprobar solicitud');return;}
+    // Usuario creado — actualizar estado de la solicitud
     showSpinner('Actualizando solicitud...');
     return sbFetch('solicitudes','PATCH',{id:'eq.'+idSol},patchSol);
   }).then(function(r){
@@ -4755,7 +4786,6 @@ function aprobarSolicitud(idSol,rolKey){
     showToast('✅ Usuario "'+(s.nombre_completo||s.nombre)+'" aprobado como '+rol);
   }).catch(function(){
     hideSpinner();
-    db.users.push({username:usuario,password:s.password_solicitada||'',nombre:s.nombre_completo||s.nombre||'',rol:rol,delegacion:s.delegacion||''});
     s.estado='Aprobado';
     actualizarBadgeSolicitudes();renderUsers();renderSolicitudes();
   });
