@@ -2756,30 +2756,95 @@ function saveProg(){
   showSpinner('Guardando programación...');
 
   if(editingProgId){
-    // PATCH — solo actualizar campos de la programación, sin tocar mantenimientos
+    // PATCH — actualizar programación Y sincronizar mantenimientos
     sbFetch('programaciones','PATCH',{id:'eq.'+editingProgId},programacion)
     .then(function(r){
       hideSpinner();
       if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar programación');return;}
-      showSpinner('Recargando...');
-      sbFetch('programaciones','GET',{select:'*'}).then(function(r2){
-        hideSpinner();
-        if(r2.ok&&Array.isArray(r2.data)) db.programaciones=r2.data.map(mapProgFromSheet);
-        _buildProgMonths();
-        document.getElementById('progBienSelModal').disabled=false;
-        closeModal('progModal');
-        document.getElementById('progBienSel').value=bienId;
-        renderProgDetalle();renderDash();
-        showToast('✅ Programación actualizada');
-      }).catch(function(){
-        hideSpinner();
-        document.getElementById('progBienSelModal').disabled=false;
-        closeModal('progModal');
-        document.getElementById('progBienSel').value=bienId;
-        renderProgDetalle();renderDash();
-        showToast('✅ Programación actualizada');
+      showSpinner('Actualizando mantenimientos...');
+
+      // 1. Obtener meses actualmente en Supabase para esta programación
+      return sbFetch('mantenimientos','GET',{
+        programacion_id:'eq.'+editingProgId,
+        select:'id,mes,estado'
+      }).then(function(rMants){
+        var mantActuales=(rMants.ok&&Array.isArray(rMants.data))?rMants.data:[];
+
+        // 2. Meses seleccionados en el formulario (índices 0-11 → 1-12)
+        var mesesNuevos=months.map(function(m){return m+1;});
+
+        // 3. Meses que ya existen en Supabase
+        var mesesExistentes=mantActuales.map(function(m){return m.mes;});
+
+        // 4. Meses a agregar (en nuevos pero no en existentes)
+        var mesesAgregar=mesesNuevos.filter(function(m){
+          return !mesesExistentes.includes(m);
+        });
+
+        // 5. Meses a eliminar (en existentes pero no en nuevos) — solo PENDIENTES
+        var mesesEliminar=mantActuales.filter(function(m){
+          return !mesesNuevos.includes(m.mes)&&m.estado==='pendiente';
+        });
+
+        // 6. Meses ejecutados — actualizar costo_ejecutado si cambió
+        var mesesEjecutados=mantActuales.filter(function(m){
+          return m.estado==='ejecutado';
+        });
+
+        var promesas=[];
+
+        // Insertar nuevos meses
+        mesesAgregar.forEach(function(mes){
+          promesas.push(sbFetch('mantenimientos','POST',{},{
+            programacion_id:editingProgId,
+            bien_id:bienId,
+            mes:mes,
+            anio:parseInt(anio),
+            estado:'pendiente',
+            costo_ejecutado:0
+          }));
+        });
+
+        // Eliminar meses pendientes quitados
+        mesesEliminar.forEach(function(m){
+          promesas.push(sbFetch('mantenimientos','DELETE',{id:'eq.'+m.id}));
+        });
+
+        // Actualizar costo_ejecutado en meses ejecutados
+        mesesEjecutados.forEach(function(m){
+          promesas.push(sbFetch('mantenimientos','PATCH',
+            {id:'eq.'+m.id},
+            {costo_ejecutado:parseFloat(programacion.costo_estimado)||0}
+          ));
+        });
+
+        return Promise.all(promesas);
       });
-    }).catch(function(){hideSpinner();apiErr();});
+    }).then(function(){
+      // Recargar programaciones y mantenimientos
+      showSpinner('Recargando...');
+      return Promise.all([
+        sbFetch('programaciones','GET',{select:'*'}),
+        sbFetch('mantenimientos','GET',{select:'*'})
+      ]);
+    }).then(function(results){
+      hideSpinner();
+      if(results&&results[0].ok&&Array.isArray(results[0].data))
+        db.programaciones=results[0].data.map(mapProgFromSheet);
+      if(results&&results[1].ok&&Array.isArray(results[1].data))
+        db.seguimientos=results[1].data.map(mapMantFromSupabase);
+      _buildProgMonths();
+      document.getElementById('progBienSelModal').disabled=false;
+      closeModal('progModal');
+      document.getElementById('progBienSel').value=bienId;
+      renderProgDetalle();renderDash();
+      registrarLog('editar_programacion','Programación editada: '+editingProgId,'programacion');
+      showToast('✅ Programación actualizada');
+    }).catch(function(){
+      hideSpinner();
+      document.getElementById('progBienSelModal').disabled=false;
+      apiErr('Error al actualizar programación');
+    });
 
   } else {
     // POST — crear programación y luego un registro en mantenimientos por cada mes
