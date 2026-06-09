@@ -1501,9 +1501,21 @@ function sbFetch(tabla,method,params,body){
 }
 // Registro de auditoría — fire-and-forget
 function registrarLog(accion,detalle,seccion){
-  var entry={usuario:currentUser?currentUser.username:'sistema',
-    accion:accion,detalle:detalle||'',seccion:seccion||''};
-  sbFetch('log','POST',{},entry).catch(function(){});
+  var entry={
+    p_usuario:currentUser?currentUser.username:'sistema',
+    p_accion:accion,
+    p_detalle:detalle||'',
+    p_seccion:seccion||''
+  };
+  fetch(SUPABASE_URL+'/rest/v1/rpc/crear_log',{
+    method:'POST',
+    headers:{
+      'apikey':SUPABASE_KEY,
+      'Authorization':'Bearer '+SUPABASE_KEY,
+      'Content-Type':'application/json'
+    },
+    body:JSON.stringify(entry)
+  }).catch(function(){});
 }
 function generarPassword(longitud){
   longitud=longitud||10;
@@ -2572,15 +2584,23 @@ function editBien(id){openBienModal(id);}
 function deleteBien(id){
   if(!confirm('¿Eliminar este bien y toda su programación?'))return;
   showSpinner('Eliminando bien...');
-  sbFetch('bienes','DELETE',{id:'eq.'+id}).then(function(r){
+  fetch(SUPABASE_URL+'/rest/v1/rpc/eliminar_bien',{
+    method:'POST',
+    headers:{
+      'apikey':SUPABASE_KEY,
+      'Authorization':'Bearer '+SUPABASE_KEY,
+      'Content-Type':'application/json'
+    },
+    body:JSON.stringify({p_id:id})
+  }).then(function(r){return r.json();})
+  .then(function(){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
-    db.bienes=db.bienes.filter(b=>b.id!==id);
-    db.programaciones=db.programaciones.filter(p=>p.bienId!==id);
-    if(db.seguimientos) db.seguimientos=db.seguimientos.filter(s=>s.bien_id!==id);
+    db.bienes=db.bienes.filter(function(b){return b.id!==id;});
+    db.programaciones=db.programaciones.filter(function(p){return p.bienId!==id;});
+    if(db.seguimientos) db.seguimientos=db.seguimientos.filter(function(s){return s.bien_id!==id;});
     renderBienes();renderDash();
-    showToast('🗑️ Bien eliminado');
     registrarLog('eliminar_bien','Bien eliminado: '+id,'bienes');
+    showToast('🗑️ Bien eliminado');
   }).catch(function(){hideSpinner();apiErr();});
 }
 function saveBien(){
@@ -2611,34 +2631,69 @@ function saveBien(){
   if(!editingBienId) bienData.registrado_por=currentUser.username;
 
   showSpinner('Guardando bien...');
-  sbFetch('bienes',editingBienId?'PATCH':'POST',
-          editingBienId?{id:'eq.'+editingBienId}:{},bienData)
-  .then(function(r){
-    hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar bien');return;}
-    // Recargar db.bienes desde Supabase para confirmar
-    showSpinner('Recargando bienes...');
-    sbFetch('bienes','GET',{select:'*'}).then(function(r2){
+  if(editingBienId){
+    // PATCH — sigue usando sbFetch
+    sbFetch('bienes','PATCH',{id:'eq.'+editingBienId},bienData)
+    .then(function(r){
       hideSpinner();
-      if(r2.ok&&Array.isArray(r2.data)) db.bienes=r2.data.map(mapBienFromSheet);
-      closeModal('bienModal');
-      renderBienes();renderDash();
-      var _logBien=editingBienId?'editar_bien':'crear_bien';
-      registrarLog(_logBien,(editingBienId?'Bien editado: ':'Bien creado: ')+codigo,'bienes');
-      showToast(editingBienId?'✅ Bien actualizado':'✅ Bien registrado');
-      editingBienId=null;
-      bFotoData=null;
-    }).catch(function(){
-      hideSpinner();
-      closeModal('bienModal');
-      renderBienes();renderDash();
-      showToast(editingBienId?'✅ Bien actualizado':'✅ Bien registrado');
-      editingBienId=null;
-      bFotoData=null;
-    });
-  }).catch(function(){
-    hideSpinner();apiErr();
-  });
+      if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar bien');return;}
+      showSpinner('Recargando bienes...');
+      sbFetch('bienes','GET',{select:'*'}).then(function(r2){
+        hideSpinner();
+        if(r2.ok&&Array.isArray(r2.data)) db.bienes=r2.data.map(mapBienFromSheet);
+        closeModal('bienModal');
+        renderBienes();renderDash();
+        registrarLog('editar_bien','Bien editado: '+codigo,'bienes');
+        showToast('✅ Bien actualizado');
+        editingBienId=null; bFotoData=null;
+      }).catch(function(){
+        hideSpinner();
+        closeModal('bienModal');
+        renderBienes();renderDash();
+        showToast('✅ Bien actualizado');
+        editingBienId=null; bFotoData=null;
+      });
+    }).catch(function(){hideSpinner();apiErr();});
+  } else {
+    // POST — usar RPC crear_bien
+    var bienObj=Object.assign({},bienData,{registrado_por:currentUser.username});
+    fetch(SUPABASE_URL+'/rest/v1/rpc/crear_bien',{
+      method:'POST',
+      headers:{
+        'apikey':SUPABASE_KEY,
+        'Authorization':'Bearer '+SUPABASE_KEY,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({
+        p_codigo:bienObj.codigo,
+        p_tipo:bienObj.tipo,
+        p_marca:bienObj.marca,
+        p_modelo:bienObj.modelo||null,
+        p_serie:bienObj.serie||null,
+        p_anio:bienObj.anio||null,
+        p_precio:bienObj.precio||0,
+        p_clasificacion:bienObj.clasificacion||null,
+        p_renglon:bienObj.renglon||null,
+        p_delegacion:bienObj.delegacion||null,
+        p_descripcion:bienObj.descripcion||null,
+        p_foto:bienObj.foto||null,
+        p_registrado_por:bienObj.registrado_por||null
+      })
+    }).then(function(r){return r.json();})
+    .then(function(data){
+      if(data&&data.code){hideSpinner();apiErr(data.message||'Error al guardar bien');return;}
+      showSpinner('Recargando bienes...');
+      sbFetch('bienes','GET',{select:'*'}).then(function(rb){
+        hideSpinner();
+        if(rb.ok&&Array.isArray(rb.data)) db.bienes=rb.data.map(mapBienFromSheet);
+        closeModal('bienModal');
+        renderBienes();renderDash();
+        registrarLog('crear_bien','Bien creado: '+codigo,'bienes');
+        showToast('✅ Bien registrado');
+        editingBienId=null; bFotoData=null;
+      });
+    }).catch(function(){hideSpinner();apiErr();});
+  }
 }
 function previewFoto(input){
   const file=input.files[0];
@@ -4526,14 +4581,23 @@ function agregarCatalogo(key,inputId){
   if(items.find(i=>i.toLowerCase()===val.toLowerCase())){showToast('⚠️ Ese valor ya existe');return;}
   const categoria=key==='tiposBien'?'tipo_bien':key==='renglones'?'renglon':key;
   showSpinner('Guardando...');
-  sbFetch('catalogos','POST',{},{tipo:categoria,valor:val}).then(function(r){
+  fetch(SUPABASE_URL+'/rest/v1/rpc/crear_catalogo',{
+    method:'POST',
+    headers:{
+      'apikey':SUPABASE_KEY,
+      'Authorization':'Bearer '+SUPABASE_KEY,
+      'Content-Type':'application/json'
+    },
+    body:JSON.stringify({p_tipo:categoria,p_valor:val})
+  }).then(function(r){return r.json();})
+  .then(function(data){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar');return;}
+    if(data&&data.code){apiErr(data.message||'Error al guardar');return;}
     items.push(val);
     if(!db.catalogos) db.catalogos={};
     db.catalogos[key]=items;
     el.value='';
-    renderTablaCatalogo(key,key==='tiposBien'?'tablaTiposBien':'tablaRenglones');
+    renderCatalogos();
     showToast('✅ Valor agregado');
   }).catch(function(){hideSpinner();apiErr();});
 }
@@ -4597,25 +4661,23 @@ function eliminarCatalogo(key,idx){
       hideSpinner();apiErr('Registro no encontrado en catálogo');return;
     }
     var regId=found.data[0].id;
-    return sbFetch('catalogos','DELETE',{id:'eq.'+regId});
-  }).then(function(r){
-    if(!r) return; // ya manejado arriba
-    hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
-    // Recargar desde Supabase para confirmar que el cambio llegó
-    showSpinner('Sincronizando...');
-    cargarCatalogos().then(function(){
+    // Usar RPC eliminar_catalogo
+    fetch(SUPABASE_URL+'/rest/v1/rpc/eliminar_catalogo',{
+      method:'POST',
+      headers:{
+        'apikey':SUPABASE_KEY,
+        'Authorization':'Bearer '+SUPABASE_KEY,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({p_id:regId})
+    }).then(function(r){return r.json();})
+    .then(function(){
       hideSpinner();
-      renderCatalogos();
-      showToast('🗑️ Valor eliminado');
-    }).catch(function(){
-      hideSpinner();
-      // Fallback: actualizar local si la recarga falla
       items.splice(idx,1);
       db.catalogos[key]=items;
       renderCatalogos();
       showToast('🗑️ Valor eliminado');
-    });
+    }).catch(function(){hideSpinner();apiErr();});
   }).catch(function(){hideSpinner();apiErr();});
 }
 
