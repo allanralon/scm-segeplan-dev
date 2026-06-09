@@ -2660,11 +2660,24 @@ function saveBien(){
 
   showSpinner('Guardando bien...');
   if(editingBienId){
-    // PATCH — sigue usando sbFetch
-    sbFetch('bienes','PATCH',{id:'eq.'+editingBienId},bienData)
-    .then(function(r){
+    // RPC — actualizar_bien
+    callRPC('actualizar_bien',{
+      p_id:editingBienId,
+      p_codigo:bienData.codigo,
+      p_tipo:bienData.tipo,
+      p_marca:bienData.marca,
+      p_modelo:bienData.modelo||null,
+      p_serie:bienData.serie||null,
+      p_anio:bienData.anio||null,
+      p_precio:bienData.precio||0,
+      p_clasificacion:bienData.clasificacion||null,
+      p_renglon:bienData.renglon||null,
+      p_delegacion:bienData.delegacion||null,
+      p_descripcion:bienData.descripcion||null,
+      p_foto:bienData.foto||null
+    }).then(function(data){
       hideSpinner();
-      if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar bien');return;}
+      if(data&&data.code){apiErr(data.message||'Error al guardar bien');return;}
       showSpinner('Recargando bienes...');
       sbFetch('bienes','GET',{select:'*'}).then(function(r2){
         hideSpinner();
@@ -2885,11 +2898,16 @@ function saveProg(){
   showSpinner('Guardando programación...');
 
   if(editingProgId){
-    // PATCH — actualizar programación Y sincronizar mantenimientos
-    sbFetch('programaciones','PATCH',{id:'eq.'+editingProgId},programacion)
-    .then(function(r){
+    // RPC — actualizar_programacion
+    callRPC('actualizar_programacion',{
+      p_id:editingProgId,
+      p_tipo_mant:programacion.tipo_mant,
+      p_periodo:programacion.periodo,
+      p_costo_estimado:programacion.costo_estimado||0,
+      p_observacion:programacion.observacion||null
+    }).then(function(data){
       hideSpinner();
-      if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar programación');return;}
+      if(data&&data.code){apiErr(data.message||'Error al guardar programación');return;}
       showSpinner('Actualizando mantenimientos...');
 
       // 1. Obtener meses actualmente en Supabase para esta programación
@@ -4106,15 +4124,20 @@ function saveEditUser(){
   };
   if(newPass) userObj.password=newPass;
   showSpinner('Guardando cambios...');
-  // PATCH por usuario original
-  var sbPatch={usuario:userObj.usuario,nombre:userObj.nombre_completo,
-    delegacion:userObj.delegacion,rol:userObj.rol};
-  if(userObj.password) sbPatch.password=hashPassword(userObj.password);
+  // RPC — actualizar_usuario
   var emailEdit=document.getElementById('euEmail');
-  if(emailEdit) sbPatch.email=emailEdit.value.trim()||null;
-  sbFetch('usuarios','PATCH',{usuario:'eq.'+origUser},sbPatch).then(function(r){
+  var passHash=newPass?hashPassword(newPass):null;
+  callRPC('actualizar_usuario',{
+    p_usuario_original:origUser,
+    p_usuario_nuevo:newUser,
+    p_nombre:newNombre,
+    p_delegacion:newDepto,
+    p_rol:newRol,
+    p_password_hash:passHash,
+    p_email:emailEdit?emailEdit.value.trim()||null:null
+  }).then(function(data){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar');return;}
+    if(data&&data.code){apiErr(data.message||'Error al guardar');return;}
     const idx=db.users.findIndex(x=>x.username===origUser);
     if(idx>=0){
       db.users[idx].username=newUser;
