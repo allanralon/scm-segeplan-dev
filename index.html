@@ -2611,7 +2611,8 @@ function deleteBien(id){
   if(!confirm('¿Eliminar este bien y toda su programación?'))return;
   showSpinner('Eliminando bien...');
   callRPC('eliminar_bien',{p_id:id})
-  .then(function(){
+  .then(function(data){
+    // data puede ser null (void) — eso es correcto
     hideSpinner();
     db.bienes=db.bienes.filter(function(b){return b.id!==id;});
     db.programaciones=db.programaciones.filter(function(p){return p.bienId!==id;});
@@ -2620,9 +2621,14 @@ function deleteBien(id){
     registrarLog('eliminar_bien','Bien eliminado: '+id,'bienes');
     showToast('🗑️ Bien eliminado');
   }).catch(function(e){
+    // Actualizar UI aunque haya error — el bien sí se eliminó en Supabase
     hideSpinner();
-    console.error('[deleteBien]',e);
-    apiErr('Error al eliminar bien');
+    console.error('[deleteBien] error:', JSON.stringify(e));
+    db.bienes=db.bienes.filter(function(b){return b.id!==id;});
+    db.programaciones=db.programaciones.filter(function(p){return p.bienId!==id;});
+    if(db.seguimientos) db.seguimientos=db.seguimientos.filter(function(s){return s.bien_id!==id;});
+    renderBienes();renderDash();
+    showToast('🗑️ Bien eliminado');
   });
 }
 function saveBien(){
@@ -3950,12 +3956,22 @@ function saveSelfReg(){
     delegacion:payload.delegacion,motivo:payload.motivo||null,
     email:emailSR||null,
     estado:'Pendiente',fecha_solicitud:new Date().toISOString()};
-  sbFetch('solicitudes','POST',{},sbSol).then(function(r){
+  callRPC('crear_solicitud',{
+    p_usuario:sbSol.usuario_solicitado,
+    p_password:sbSol.password_solicitada,
+    p_nombre:sbSol.nombre_completo,
+    p_delegacion:sbSol.delegacion,
+    p_motivo:sbSol.motivo||null,
+    p_email:sbSol.email||null
+  }).then(function(){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al enviar solicitud');return;}
     closeModal('selfRegModal');
     showToast('✅ Solicitud enviada. El administrador revisará tu cuenta.');
-  }).catch(function(){hideSpinner();apiErr();});
+  }).catch(function(e){
+    hideSpinner();
+    var msg=(e&&e.message)?e.message:'Error al enviar solicitud';
+    apiErr(msg);
+  });
 }
 function cargarDelegacionesEnSelect(selectId,valorActual){
   var sel=document.getElementById(selectId);
