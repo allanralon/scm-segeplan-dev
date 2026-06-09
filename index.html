@@ -2610,15 +2610,7 @@ function editBien(id){openBienModal(id);}
 function deleteBien(id){
   if(!confirm('¿Eliminar este bien y toda su programación?'))return;
   showSpinner('Eliminando bien...');
-  fetch(SUPABASE_URL+'/rest/v1/rpc/eliminar_bien',{
-    method:'POST',
-    headers:{
-      'apikey':SUPABASE_KEY,
-      'Authorization':'Bearer '+SUPABASE_KEY,
-      'Content-Type':'application/json'
-    },
-    body:JSON.stringify({p_id:id})
-  }).then(function(r){return r.json();})
+  callRPC('eliminar_bien',{p_id:id})
   .then(function(){
     hideSpinner();
     db.bienes=db.bienes.filter(function(b){return b.id!==id;});
@@ -2627,7 +2619,11 @@ function deleteBien(id){
     renderBienes();renderDash();
     registrarLog('eliminar_bien','Bien eliminado: '+id,'bienes');
     showToast('🗑️ Bien eliminado');
-  }).catch(function(){hideSpinner();apiErr();});
+  }).catch(function(e){
+    hideSpinner();
+    console.error('[deleteBien]',e);
+    apiErr('Error al eliminar bien');
+  });
 }
 function saveBien(){
   const codigo=document.getElementById('bCodigo').value.trim();
@@ -3077,7 +3073,7 @@ function getProgSelectedMonths(){
   return [...document.querySelectorAll('#progMonthsGrid .month-btn.selected')].map(el=>parseInt(el.dataset.idx));
 }
 function deleteProg(id){
-  if(!confirm('¿Eliminar esta programación y su historial de ejecución?'))return;
+  if(!confirm('¿Eliminar esta programación y su historial?'))return;
   showSpinner('Eliminando programación...');
   callRPC('eliminar_programacion',{p_id:id})
   .then(function(){
@@ -3089,7 +3085,7 @@ function deleteProg(id){
     showToast('🗑️ Programación eliminada');
   }).catch(function(e){
     hideSpinner();
-    console.error('[deleteProg] error:', e);
+    console.error('[deleteProg]',e);
     apiErr('Error al eliminar programación');
   });
 }
