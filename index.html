@@ -1499,6 +1499,18 @@ function sbFetch(tabla,method,params,body){
     })
     .catch(function(e){console.error('sbFetch error:',e);return {ok:false,error:e.message};});
 }
+// Helper RPC — llama funciones PostgreSQL via REST
+function callRPC(nombre,params){
+  return fetch(SUPABASE_URL+'/rest/v1/rpc/'+nombre,{
+    method:'POST',
+    headers:{
+      'apikey':SUPABASE_KEY,
+      'Authorization':'Bearer '+SUPABASE_KEY,
+      'Content-Type':'application/json'
+    },
+    body:JSON.stringify(params)
+  }).then(function(r){return r.json();});
+}
 // Registro de auditoría — fire-and-forget
 function registrarLog(accion,detalle,seccion){
   var entry={
@@ -2894,21 +2906,21 @@ function saveProg(){
 
         var promesas=[];
 
-        // Insertar nuevos meses
+        // Insertar nuevos meses via RPC
         mesesAgregar.forEach(function(mes){
-          promesas.push(sbFetch('mantenimientos','POST',{},{
-            programacion_id:editingProgId,
-            bien_id:bienId,
-            mes:mes,
-            anio:parseInt(anio),
-            estado:'pendiente',
-            costo_ejecutado:0
+          promesas.push(callRPC('crear_mantenimiento',{
+            p_programacion_id:editingProgId,
+            p_bien_id:bienId,
+            p_mes:mes,
+            p_anio:parseInt(anio),
+            p_estado:'pendiente',
+            p_costo_ejecutado:0
           }));
         });
 
-        // Eliminar meses pendientes quitados
+        // Eliminar meses pendientes quitados via RPC
         mesesEliminar.forEach(function(m){
-          promesas.push(sbFetch('mantenimientos','DELETE',{id:'eq.'+m.id}));
+          promesas.push(callRPC('eliminar_mantenimiento',{p_id:m.id}));
         });
 
         // Actualizar costo_ejecutado en meses ejecutados
@@ -2948,22 +2960,24 @@ function saveProg(){
     });
 
   } else {
-    // POST — crear programación y luego un registro en mantenimientos por cada mes
-    sbFetch('programaciones','POST',{},programacion)
-    .then(function(r){
+    // POST — crear programación via RPC y luego mantenimientos por mes
+    callRPC('crear_programacion',{
+      p_bien_id:bienId,
+      p_tipo_mant:tipoMant,
+      p_periodo:periodo,
+      p_costo_estimado:parseFloat(document.getElementById('progCosto').value)||0,
+      p_anio:parseInt(anio),
+      p_observacion:document.getElementById('progObs')?
+        document.getElementById('progObs').value.trim():''
+    }).then(function(data){
       hideSpinner();
-      if(!r.ok){apiErr((r.error&&r.error.message)||'Error al guardar programación');return;}
-      // Manejar r.data como array o como objeto directo (Supabase puede devolver ambos)
-      const progData=r.data;
-      const progId=Array.isArray(progData)
-        ?(progData[0]&&progData[0].id)
-        :(progData&&progData.id);
-      console.log('[saveProg] progId:', progId, '| r.data:', JSON.stringify(r.data));
+      if(data&&data.code){apiErr(data.message||'Error al guardar programación');return;}
+      // data es array con el registro creado, o el objeto directamente
+      var progId=Array.isArray(data)?(data[0]&&data[0].id):(data&&data.id);
 
       // Función auxiliar: insertar mantenimientos por mes y recargar
       function doInsertMants(pid){
         if(!pid){
-          // No hay pid — recargar sin crear mantenimientos
           showSpinner('Recargando...');
           return sbFetch('programaciones','GET',{select:'*'}).then(function(r2){
             hideSpinner();
@@ -2978,13 +2992,13 @@ function saveProg(){
         }
         showSpinner('Creando mantenimientos...');
         const insertPromises=(months.length>0?months:[]).map(function(mesIdx){
-          return sbFetch('mantenimientos','POST',{},{
-            programacion_id:pid,
-            bien_id:bienId,
-            mes:mesIdx+1,
-            anio:parseInt(anio),
-            estado:'pendiente',
-            costo_ejecutado:0
+          return callRPC('crear_mantenimiento',{
+            p_programacion_id:pid,
+            p_bien_id:bienId,
+            p_mes:mesIdx+1,
+            p_anio:parseInt(anio),
+            p_estado:'pendiente',
+            p_costo_ejecutado:0
           });
         });
         return Promise.all(insertPromises).then(function(){
@@ -3020,8 +3034,7 @@ function saveProg(){
           order:'created_at.desc',
           limit:'1'
         }).then(function(rGet){
-          const progId2=rGet.ok&&Array.isArray(rGet.data)&&rGet.data[0]&&rGet.data[0].id;
-          console.log('[saveProg] progId2 (fallback GET):', progId2);
+          var progId2=rGet.ok&&Array.isArray(rGet.data)&&rGet.data[0]&&rGet.data[0].id;
           return doInsertMants(progId2);
         });
       }
@@ -3051,13 +3064,14 @@ function getProgSelectedMonths(){
 function deleteProg(id){
   if(!confirm('¿Eliminar esta programación y su historial de ejecución?'))return;
   showSpinner('Eliminando programación...');
-  sbFetch('programaciones','DELETE',{id:'eq.'+id}).then(function(r){
+  callRPC('eliminar_programacion',{p_id:id})
+  .then(function(){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al eliminar');return;}
-    db.programaciones=db.programaciones.filter(p=>p.id!==id);
+    db.programaciones=db.programaciones.filter(function(p){return p.id!==id;});
+    if(db.seguimientos) db.seguimientos=db.seguimientos.filter(function(s){return s.programacion_id!==id;});
     renderProgDetalle();renderDash();
-    showToast('🗑️ Programación eliminada');
     registrarLog('eliminar_programacion','Programación eliminada: '+id,'programacion');
+    showToast('🗑️ Programación eliminada');
   }).catch(function(){hideSpinner();apiErr();});
 }
 
