@@ -1506,10 +1506,24 @@ function callRPC(nombre,params){
     headers:{
       'apikey':SUPABASE_KEY,
       'Authorization':'Bearer '+SUPABASE_KEY,
-      'Content-Type':'application/json'
+      'Content-Type':'application/json',
+      'Prefer':'return=representation'
     },
-    body:JSON.stringify(params)
-  }).then(function(r){return r.json();});
+    body:JSON.stringify(params||{})
+  }).then(function(r){
+    if(!r.ok){
+      return r.text().then(function(t){
+        var err;
+        try{err=JSON.parse(t);}catch(e){err={message:t};}
+        return Promise.reject(err);
+      });
+    }
+    // 204 No Content o respuesta vacía (funciones void) → retornar null
+    return r.text().then(function(t){
+      if(!t||t.trim()==='') return null;
+      try{return JSON.parse(t);}catch(e){return null;}
+    });
+  });
 }
 // Registro de auditoría — fire-and-forget
 function registrarLog(accion,detalle,seccion){
@@ -2920,6 +2934,7 @@ function saveProg(){
 
         // Eliminar meses pendientes quitados via RPC
         mesesEliminar.forEach(function(m){
+          console.log('[deleteMes] id a eliminar:', m.id, typeof m.id);
           promesas.push(callRPC('eliminar_mantenimiento',{p_id:m.id}));
         });
 
@@ -3072,7 +3087,11 @@ function deleteProg(id){
     renderProgDetalle();renderDash();
     registrarLog('eliminar_programacion','Programación eliminada: '+id,'programacion');
     showToast('🗑️ Programación eliminada');
-  }).catch(function(){hideSpinner();apiErr();});
+  }).catch(function(e){
+    hideSpinner();
+    console.error('[deleteProg] error:', e);
+    apiErr('Error al eliminar programación');
+  });
 }
 
 // ============================================================
