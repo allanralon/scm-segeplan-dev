@@ -1633,7 +1633,7 @@ function doLogin(){
     var d=data[0];
     var token=d.usuario+'_'+Date.now()+'_'+Math.random().toString(36).substr(2,16);
     // Guardar token en Supabase — fire-and-forget
-    sbFetch('usuarios','PATCH',{usuario:'eq.'+d.usuario},{session_token:token}).catch(function(){});
+    callRPC('actualizar_session_token',{p_usuario:d.usuario,p_token:token}).catch(function(){});
     currentUser={
       username:d.usuario,
       nombre:d.nombre||d.usuario,
@@ -1690,7 +1690,7 @@ function _applyLogin(user){
 function doLogout(){
   // Limpiar token en Supabase — fire-and-forget
   if(currentUser&&currentUser.username){
-    sbFetch('usuarios','PATCH',{usuario:'eq.'+currentUser.username},{session_token:null}).catch(function(){});
+    callRPC('actualizar_session_token',{p_usuario:currentUser.username,p_token:null}).catch(function(){});
   }
   registrarLog('logout','Sesión cerrada','login');
   currentUser=null;
@@ -3254,7 +3254,35 @@ function toggleMant(progId,month,done,bienId,anio){
     estado:done?'ejecutado':'pendiente',fecha_ejecucion:done?seg.fecha_ejecucion:null,
     ejecutado_por:done?seg.ejecutado_por:null,observacion:obsActual||null,
     costo_ejecutado:costoEjec};
-  sbFetch('mantenimientos',idEx?'PATCH':'POST',idEx?{id:'eq.'+idEx}:{},sbSeg).then(function(r){
+  var mantPromise;
+  if(idEx){
+    // RPC — actualizar_mantenimiento (registro existente)
+    mantPromise=callRPC('actualizar_mantenimiento',{
+      p_id:idEx,
+      p_estado:sbSeg.estado,
+      p_fecha_ejecucion:sbSeg.fecha_ejecucion||null,
+      p_ejecutado_por:sbSeg.ejecutado_por||null,
+      p_observacion:sbSeg.observacion||null,
+      p_costo_ejecutado:sbSeg.costo_ejecutado||0
+    }).then(function(data){
+      if(data&&data.code) return Promise.reject(data.message||'Error al guardar');
+      return {ok:true,data:[{id:idEx}]};
+    });
+  } else {
+    // RPC — crear_mantenimiento (registro nuevo)
+    mantPromise=callRPC('crear_mantenimiento',{
+      p_programacion_id:progId,
+      p_bien_id:bienId,
+      p_mes:sbSeg.mes,
+      p_anio:sbSeg.anio,
+      p_estado:sbSeg.estado,
+      p_costo_ejecutado:sbSeg.costo_ejecutado||0
+    }).then(function(data){
+      if(data&&data.code) return Promise.reject(data.message||'Error al guardar');
+      return {ok:true,data:[{id:(data&&data[0]&&data[0].id)||''}]};
+    });
+  }
+  mantPromise.then(function(r){
     hideSpinner();
     if(!r.ok){apiErr(r.error||'Error al guardar');return;}
     if(!db.mantMap) db.mantMap={};
@@ -3336,15 +3364,39 @@ function saveObs(progId,month,bienId,anio){
   };
 
   var idExO=registroExistente?registroExistente.id_seguimiento:'';
-  var sbSegO={programacion_id:progId,bien_id:bienId,mes:month+1,anio:seg.anio,
-    estado:rec.ejecutado?'ejecutado':'pendiente',
-    fecha_ejecucion:seg.fecha_ejecucion||null,
-    ejecutado_por:seg.ejecutado_por||null,observacion:val,
-    costo_ejecutado:rec.costo_ejecutado||(function(){
-      var pgO=db.programaciones.find(function(x){return x.id===progId;});
-      return pgO?pgO.costo:0;
-    })()};
-  sbFetch('mantenimientos',idExO?'PATCH':'POST',idExO?{id:'eq.'+idExO}:{},sbSegO).then(function(r){
+  var costoExO=rec.costo_ejecutado||(function(){
+    var pgO=db.programaciones.find(function(x){return x.id===progId;});
+    return pgO?pgO.costo:0;
+  })();
+  var obsPromise;
+  if(idExO){
+    // RPC — actualizar_mantenimiento (registro existente)
+    obsPromise=callRPC('actualizar_mantenimiento',{
+      p_id:idExO,
+      p_estado:rec.ejecutado?'ejecutado':'pendiente',
+      p_fecha_ejecucion:seg.fecha_ejecucion||null,
+      p_ejecutado_por:seg.ejecutado_por||null,
+      p_observacion:val,
+      p_costo_ejecutado:costoExO||0
+    }).then(function(data){
+      if(data&&data.code) return Promise.reject(data.message||'Error al guardar');
+      return {ok:true,data:[{id:idExO}]};
+    });
+  } else {
+    // RPC — crear_mantenimiento (registro nuevo)
+    obsPromise=callRPC('crear_mantenimiento',{
+      p_programacion_id:progId,
+      p_bien_id:bienId,
+      p_mes:month+1,
+      p_anio:seg.anio,
+      p_estado:rec.ejecutado?'ejecutado':'pendiente',
+      p_costo_ejecutado:costoExO||0
+    }).then(function(data){
+      if(data&&data.code) return Promise.reject(data.message||'Error al guardar');
+      return {ok:true,data:[{id:(data&&data[0]&&data[0].id)||''}]};
+    });
+  }
+  obsPromise.then(function(r){
     if(!r.ok){return;}
     var newIdO=idExO||(r.data&&r.data[0]&&r.data[0].id)||'';
     if(!db.mantMap) db.mantMap={};
@@ -4078,9 +4130,9 @@ function deleteUser(username){
   if(!confirm('¿Desactivar este usuario?\n\n'
     +'El usuario no podrá iniciar sesión pero sus registros se conservarán.'))return;
   showSpinner('Desactivando...');
-  sbFetch('usuarios','PATCH',{usuario:'eq.'+username},{activo:false}).then(function(r){
+  callRPC('actualizar_activo_usuario',{p_usuario:username,p_activo:false}).then(function(data){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al desactivar');return;}
+    if(data&&data.code){apiErr(data.message||'Error al desactivar');return;}
     db.users=db.users.map(function(u){if(u.username===username)u.activo=false;return u;});
     renderUsers();
     registrarLog('desactivar_usuario','Usuario desactivado: '+username,'usuarios');
@@ -4166,9 +4218,9 @@ function deleteUserFromModal(){
   if(!confirm('¿Desactivar al usuario "'+username+'"?\n\n'
     +'El usuario no podrá iniciar sesión pero sus registros se conservarán.'))return;
   showSpinner('Desactivando...');
-  sbFetch('usuarios','PATCH',{usuario:'eq.'+username},{activo:false}).then(function(r){
+  callRPC('actualizar_activo_usuario',{p_usuario:username,p_activo:false}).then(function(data){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al desactivar');return;}
+    if(data&&data.code){apiErr(data.message||'Error al desactivar');return;}
     db.users=db.users.map(function(u){if(u.username===username)u.activo=false;return u;});
     closeModal('editUserModal');renderUsers();
     registrarLog('desactivar_usuario','Usuario desactivado: '+username,'usuarios');
@@ -4178,9 +4230,9 @@ function deleteUserFromModal(){
 function reactivarUser(username){
   if(!confirm('¿Reactivar este usuario?\n\nEl usuario podrá volver a iniciar sesión.'))return;
   showSpinner('Reactivando...');
-  sbFetch('usuarios','PATCH',{usuario:'eq.'+username},{activo:true}).then(function(r){
+  callRPC('actualizar_activo_usuario',{p_usuario:username,p_activo:true}).then(function(data){
     hideSpinner();
-    if(!r.ok){apiErr();return;}
+    if(data&&data.code){apiErr();return;}
     db.users=db.users.map(function(u){if(u.username===username)u.activo=true;return u;});
     renderUsers();
     registrarLog('reactivar_usuario','Usuario reactivado: '+username,'usuarios');
@@ -4693,7 +4745,13 @@ function guardarEditCat(){
       hideSpinner();apiErr('Registro no encontrado en catálogo');return;
     }
     var regId=found.data[0].id;
-    return sbFetch('catalogos','PATCH',{id:'eq.'+regId},{valor:val});
+    return callRPC('actualizar_catalogo',{
+      p_id:regId,
+      p_valor:val
+    }).then(function(data){
+      if(data&&data.code) return Promise.reject(data.message||'Error al guardar');
+      return {ok:true};
+    });
   }).then(function(r){
     if(!r) return; // ya manejado arriba
     hideSpinner();
@@ -4898,7 +4956,15 @@ function aprobarSolicitud(idSol,rolKey){
     if(data&&data.code){apiErr(data.message||'Error al aprobar solicitud');return;}
     // Usuario creado — actualizar estado de la solicitud
     showSpinner('Actualizando solicitud...');
-    return sbFetch('solicitudes','PATCH',{id:'eq.'+idSol},patchSol);
+    return callRPC('actualizar_solicitud',{
+      p_id:idSol,
+      p_estado:patchSol.estado,
+      p_revisado_por:patchSol.revisado_por,
+      p_fecha_revision:patchSol.fecha_revision
+    }).then(function(d){
+      if(d&&d.code) return Promise.reject(d.message||'Error al actualizar solicitud');
+      return {ok:true};
+    });
   }).then(function(r){
     if(!r) return;
     showSpinner('Recargando...');
@@ -4930,9 +4996,14 @@ function rechazarSolicitud(idSol){
   showSpinner('Rechazando...');
   var patchRech={estado:'Rechazado',revisado_por:currentUser.username,
     fecha_revision:new Date().toISOString().split('T')[0]};
-  sbFetch('solicitudes','PATCH',{id:'eq.'+idSol},patchRech).then(function(r){
+  callRPC('actualizar_solicitud',{
+    p_id:idSol,
+    p_estado:patchRech.estado,
+    p_revisado_por:patchRech.revisado_por,
+    p_fecha_revision:patchRech.fecha_revision
+  }).then(function(data){
     hideSpinner();
-    if(!r.ok){apiErr((r.error&&r.error.message)||'Error al rechazar');return;}
+    if(data&&data.code){apiErr(data.message||'Error al rechazar');return;}
     return sbFetch('solicitudes','GET',{select:'*'});
   }).then(function(r2){
     if(!r2) return;
