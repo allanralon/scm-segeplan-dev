@@ -799,26 +799,26 @@ td:has(.actions){white-space:nowrap;width:1px;}
         <input type="text" id="bienSearch" placeholder="🔍 Buscar por código, tipo o marca..." oninput="renderBienes()"/>
         <button class="btn btn-primary" onclick="openBienModal()"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg> Nuevo Bien</button>
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
-        <div style="display:flex;align-items:center;gap:6px;">
-          <label for="filtroResponsable" style="font-size:.82rem;color:var(--text-secondary);white-space:nowrap;">👤 Responsable:</label>
-          <select id="filtroResponsable" onchange="renderBienes()" style="font-size:.82rem;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);min-width:160px;">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label for="filtroResponsable" style="font-size:.82rem;color:var(--text-secondary);white-space:nowrap;font-weight:500;">👤 Responsable</label>
+          <select id="filtroResponsable" onchange="renderBienes()" style="min-width:170px;font-size:.85rem;">
             <option value="">Todos</option>
           </select>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <label for="filtroEstadoBien" style="font-size:.82rem;color:var(--text-secondary);white-space:nowrap;">🏷️ Estado:</label>
-          <select id="filtroEstadoBien" onchange="renderBienes()" style="font-size:.82rem;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);min-width:160px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label for="filtroEstadoBien" style="font-size:.82rem;color:var(--text-secondary);white-space:nowrap;font-weight:500;">🏷️ Estado</label>
+          <select id="filtroEstadoBien" onchange="renderBienes()" style="min-width:170px;font-size:.85rem;">
             <option value="">Todos</option>
-            <option value="Activo">✅ Activo</option>
-            <option value="En bodega">📦 En bodega</option>
-            <option value="En mantenimiento">🔧 En mantenimiento</option>
-            <option value="Deteriorado">⚠️ Deteriorado</option>
-            <option value="Obsoleto">🚫 Obsoleto</option>
-            <option value="Dado de baja">❌ Dado de baja</option>
+            <option value="Activo">Activo</option>
+            <option value="En bodega">En bodega</option>
+            <option value="En mantenimiento">En mantenimiento</option>
+            <option value="Deteriorado">Deteriorado</option>
+            <option value="Obsoleto">Obsoleto</option>
+            <option value="Dado de baja">Dado de baja</option>
           </select>
         </div>
-        <button onclick="limpiarFiltrosBienes()" style="font-size:.78rem;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);cursor:pointer;">✕ Limpiar filtros</button>
+        <button onclick="limpiarFiltrosBienes()" class="btn" style="font-size:.82rem;padding:8px 14px;color:var(--text-secondary);">✕ Limpiar</button>
       </div>
       <!-- Vista escritorio -->
       <div class="card bien-table-desktop">
@@ -4608,8 +4608,8 @@ function renderReporteBienes(){
                 '<span style="font-size:.75rem;font-weight:600;background:'+c.bg+';color:'+c.text+';padding:3px 10px;border-radius:99px;">'+label+'</span>'+
                 '<span style="font-size:.75rem;color:var(--text-secondary);">'+fecha+' · '+hora+'</span>'+
               '</div>'+
-              '<div style="font-size:.84rem;color:var(--text-primary);margin-bottom:4px;">'+lg.detalle+'</div>'+
-              '<div style="font-size:.75rem;color:var(--text-secondary);">👤 '+lg.usuario+'</div>'+
+              '<div style="font-size:.84rem;color:var(--text-primary);margin-bottom:4px;text-align:left;">'+lg.detalle+'</div>'+
+              '<div style="font-size:.75rem;color:var(--text-secondary);text-align:left;">👤 '+lg.usuario+'</div>'+
             '</div>'+
           '</div>';
       });
