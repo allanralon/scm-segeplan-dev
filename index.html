@@ -799,6 +799,27 @@ td:has(.actions){white-space:nowrap;width:1px;}
         <input type="text" id="bienSearch" placeholder="🔍 Buscar por código, tipo o marca..." oninput="renderBienes()"/>
         <button class="btn btn-primary" onclick="openBienModal()"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg> Nuevo Bien</button>
       </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label for="filtroResponsable" style="font-size:.82rem;color:var(--text-secondary);white-space:nowrap;">👤 Responsable:</label>
+          <select id="filtroResponsable" onchange="renderBienes()" style="font-size:.82rem;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);min-width:160px;">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label for="filtroEstadoBien" style="font-size:.82rem;color:var(--text-secondary);white-space:nowrap;">🏷️ Estado:</label>
+          <select id="filtroEstadoBien" onchange="renderBienes()" style="font-size:.82rem;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);min-width:160px;">
+            <option value="">Todos</option>
+            <option value="Activo">✅ Activo</option>
+            <option value="En bodega">📦 En bodega</option>
+            <option value="En mantenimiento">🔧 En mantenimiento</option>
+            <option value="Deteriorado">⚠️ Deteriorado</option>
+            <option value="Obsoleto">🚫 Obsoleto</option>
+            <option value="Dado de baja">❌ Dado de baja</option>
+          </select>
+        </div>
+        <button onclick="limpiarFiltrosBienes()" style="font-size:.78rem;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);cursor:pointer;">✕ Limpiar filtros</button>
+      </div>
       <!-- Vista escritorio -->
       <div class="card bien-table-desktop">
         <div class="table-wrap">
@@ -1935,7 +1956,7 @@ function gotoSection(id,navEl){
   const sidebarMatch=document.querySelector(`.sidebar-nav-item[data-section="${id}"]`);
   if(sidebarMatch) sidebarMatch.classList.add('active');
   if(id==='secDash') renderDash();
-  if(id==='secBienes') renderBienes();
+  if(id==='secBienes'){poblarFiltroResponsable();renderBienes();}
   if(id==='secProg'){
     showSpinner('Cargando programaciones...');
     Promise.all([
@@ -2577,15 +2598,46 @@ function quickConfirm(progId,month){
 }
 // BIENES
 // ============================================================
+function poblarFiltroResponsable(){
+  var sel=document.getElementById('filtroResponsable');
+  if(!sel) return;
+  var actual=sel.value;
+  var responsables=[...new Set(
+    (db.bienes||[])
+      .map(function(b){return (b.responsable||'').trim();})
+      .filter(function(r){return r!=='';})
+  )].sort();
+  sel.innerHTML='<option value="">Todos</option>'+
+    responsables.map(function(r){
+      return '<option value="'+r+'"'+(actual===r?' selected':'')+'>'+r+'</option>';
+    }).join('');
+}
+function limpiarFiltrosBienes(){
+  var s=document.getElementById('bienSearch');
+  var r=document.getElementById('filtroResponsable');
+  var e=document.getElementById('filtroEstadoBien');
+  if(s) s.value='';
+  if(r) r.value='';
+  if(e) e.value='';
+  renderBienes();
+}
 function renderBienes(){
   const q=(document.getElementById('bienSearch')||{}).value?.toLowerCase()||'';
-  const bienes=bienesVisibles().filter(b=>
-    b.codigo.toLowerCase().includes(q)||b.tipo.toLowerCase().includes(q)||
-    b.marca.toLowerCase().includes(q)||
-    (b.serie||'').toLowerCase().includes(q)||
-    (b.clasificacion||'').toLowerCase().includes(q)||
-    (b.renglon||'').toLowerCase().includes(q)
-  );
+  const filtroResp=(document.getElementById('filtroResponsable')||{}).value||'';
+  const filtroEst=(document.getElementById('filtroEstadoBien')||{}).value||'';
+  const bienes=bienesVisibles().filter(b=>{
+    const matchQ=!q||(
+      b.codigo.toLowerCase().includes(q)||b.tipo.toLowerCase().includes(q)||
+      b.marca.toLowerCase().includes(q)||
+      (b.serie||'').toLowerCase().includes(q)||
+      (b.clasificacion||'').toLowerCase().includes(q)||
+      (b.renglon||'').toLowerCase().includes(q)
+    );
+    const matchResp=!filtroResp||(b.responsable||'')===filtroResp;
+    const matchEst=!filtroEst||(b.estado||'Activo')===filtroEst;
+    return matchQ&&matchResp&&matchEst;
+  });
+  poblarFiltroResponsable();
   const tb=document.getElementById('bienesTable');
   const em=document.getElementById('bienesEmpty');
   const mobileWrap=document.getElementById('bienesCardsMobile');
