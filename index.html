@@ -2633,7 +2633,11 @@ function openBienModal(id){
   var clasifActual=id?(db.bienes.find(function(x){return x.id===id;})||{}).clasificacion||'':'';
   poblarSelectClasificacion(clasifActual);
   ['bCodigo','bTipo','bMarca','bModelo','bSerie','bAnio','bPrecio','bDesc','bRenglon','bResponsable'].forEach(function(f){var el=document.getElementById(f);if(el)el.value='';});
-  if(!id) document.getElementById('bClasificacion').value='';
+  if(!id){
+    document.getElementById('bClasificacion').value='';
+    var bEstReset=document.getElementById('bEstado');
+    if(bEstReset){bEstReset.value='Activo';bEstReset.dispatchEvent(new Event('change'));}
+  }
   document.getElementById('bFotoPreview').style.display='none';
   document.getElementById('bFotoPreview').src='';
   document.getElementById('photoPlaceholder').style.display='block';
@@ -2798,7 +2802,13 @@ function saveBien(){
         p_responsable:bienObj.responsable||null,
         p_estado:bienObj.estado||'Activo'
       })
-    }).then(function(r){return r.json();})
+    }).then(function(r){
+      if(r.status===204||r.status===201){return null;}
+      return r.text().then(function(t){
+        if(!t||t.trim()==='') return null;
+        try{return JSON.parse(t);}catch(e){return null;}
+      });
+    })
     .then(function(data){
       if(data&&data.code){hideSpinner();apiErr(data.message||'Error al guardar bien');return;}
       showSpinner('Recargando bienes...');
@@ -3064,7 +3074,9 @@ function saveProg(){
       closeModal('progModal');
       document.getElementById('progBienSel').value=bienId;
       renderProgDetalle();renderDash();
-      registrarLog('editar_programacion','Programación editada: '+editingProgId,'programacion');
+      var bIdEdit=(db.programaciones.find(function(x){return x.id===editingProgId;})||{}).bienId||'';
+      var bCodEdit=(db.bienes.find(function(x){return x.id===bIdEdit;})||{}).codigo||bIdEdit;
+      registrarLog('editar_programacion',bCodEdit+' — Programación editada: '+tipoMant+' '+anio,'bienes');
       showToast('✅ Programación actualizada');
     }).catch(function(){
       hideSpinner();
@@ -3130,7 +3142,8 @@ function saveProg(){
           closeModal('progModal');
           document.getElementById('progBienSel').value=bienId;
           renderProgDetalle();renderDash();
-          registrarLog('crear_programacion','Programación creada para bien: '+bienId,'programacion');
+          var bCod=(db.bienes.find(function(x){return x.id===bienId;})||{}).codigo||bienId;
+          registrarLog('crear_programacion',bCod+' — Nueva programación: '+tipoMant+' '+anio+' ('+periodo+')','bienes');
           showToast('✅ Programación guardada');
         });
       }
@@ -3180,10 +3193,12 @@ function deleteProg(id){
   callRPC('eliminar_programacion',{p_id:id})
   .then(function(){
     hideSpinner();
+    var pDel=db.programaciones.find(function(x){return x.id===id;})||{};
+    var bCodDel=(db.bienes.find(function(x){return x.id===pDel.bienId;})||{}).codigo||pDel.bienId||id;
     db.programaciones=db.programaciones.filter(function(p){return p.id!==id;});
     if(db.seguimientos) db.seguimientos=db.seguimientos.filter(function(s){return s.programacion_id!==id;});
     renderProgDetalle();renderDash();
-    registrarLog('eliminar_programacion','Programación eliminada: '+id,'programacion');
+    registrarLog('eliminar_programacion',bCodDel+' — Programación eliminada','bienes');
     showToast('🗑️ Programación eliminada');
   }).catch(function(e){
     hideSpinner();
