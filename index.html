@@ -2770,6 +2770,8 @@ function saveBien(){
         if((bOrig.estado||'Activo')!==bienData.estado) cambios.push('Estado: '+(bOrig.estado||'Activo')+' → '+bienData.estado);
         if((bOrig.clasificacion||'')!==bienData.clasificacion) cambios.push('Clasificación: '+(bOrig.clasificacion||'—')+' → '+(bienData.clasificacion||'—'));
         if((bOrig.renglon||'')!==bienData.renglon) cambios.push('Renglón: '+(bOrig.renglon||'—')+' → '+(bienData.renglon||'—'));
+        if(String(bOrig.anio||'')!==String(bienData.anio||'')) cambios.push('Año: '+(bOrig.anio||'—')+' → '+(bienData.anio||'—'));
+        if(String(bOrig.precio||0)!==String(bienData.precio||0)) cambios.push('Precio: Q'+(bOrig.precio||0)+' → Q'+(bienData.precio||0));
         const detalleCambio=cambios.length>0?cambios.join(' | '):'Sin cambios registrados';
         registrarLog('editar_bien',codigo+' — '+detalleCambio,'bienes');
         showToast('✅ Bien actualizado');
@@ -4510,8 +4512,8 @@ function renderReporteBienes(){
       (b.desc?'<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:.85rem;color:var(--text-secondary);">'+b.desc+'</div>':'')+
     '</div>'+
     '<div class="card" id="rptLogCard">'+
-      '<div class="card-title">🗂️ Bitácora de Cambios</div>'+
-      '<div id="rptLogBody" style="text-align:center;padding:20px;color:var(--text-secondary);">⏳ Cargando bitácora...</div>'+
+      '<div class="card-title">📅 Historial del Bien</div>'+
+      '<div id="rptLogBody" style="text-align:center;padding:20px;color:var(--text-secondary);">⏳ Cargando historial...</div>'+
     '</div>'+
     '<div class="card" id="rptMantCard">'+
       '<div class="card-title">🔧 Historial de Mantenimientos</div>'+
@@ -4523,29 +4525,55 @@ function renderReporteBienes(){
       if(!logEl) return;
       const rows=(r.ok&&Array.isArray(r.data))?r.data:[];
       if(rows.length===0){
-        logEl.innerHTML='<div class="alert alert-info">Sin registros en la bitácora para este bien.</div>';
-      } else {
-        logEl.innerHTML=
-          '<div class="table-wrap"><table>'+
-          '<thead><tr><th>Fecha</th><th>Hora</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead>'+
-          '<tbody>'+rows.map(function(lg){
-            const dt=lg.created_at?new Date(lg.created_at):null;
-            const fecha=dt?dt.toLocaleDateString('es-GT'):'—';
-            const hora=dt?dt.toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'}):'—';
-            const accionLabel={'crear_bien':'Registro inicial','editar_bien':'Edición','eliminar_bien':'Eliminación'}[lg.accion]||lg.accion;
-            return '<tr>'+
-              '<td style="font-size:.82rem;">'+fecha+'</td>'+
-              '<td style="font-size:.82rem;font-family:var(--mono)">'+hora+'</td>'+
-              '<td style="font-size:.82rem;font-family:var(--mono)">'+lg.usuario+'</td>'+
-              '<td><span class="badge '+(lg.accion==='crear_bien'?'badge-green':lg.accion==='eliminar_bien'?'badge-red':'badge-blue')+'">'+accionLabel+'</span></td>'+
-              '<td style="font-size:.82rem;">'+lg.detalle+'</td>'+
-            '</tr>';
-          }).join('')+
-          '</tbody></table></div>';
+        logEl.innerHTML='<div class="alert alert-info">Sin registros en el historial para este bien.</div>';
+        return;
       }
+      const colorMap={
+        'crear_bien':    {dot:'#1D9E75',bg:'#E1F5EE',text:'#0F6E56',label:'Registro inicial'},
+        'editar_bien':   {dot:'#BA7517',bg:'#FAEEDA',text:'#854F0B',label:'Edición'},
+        'eliminar_bien': {dot:'#A32D2D',bg:'#FCEBEB',text:'#791F1F',label:'Eliminación'},
+        'crear_programacion':   {dot:'#378ADD',bg:'#E6F1FB',text:'#185FA5',label:'Nueva programación'},
+        'editar_programacion':  {dot:'#378ADD',bg:'#E6F1FB',text:'#185FA5',label:'Programación editada'},
+        'eliminar_programacion':{dot:'#A32D2D',bg:'#FCEBEB',text:'#791F1F',label:'Programación eliminada'},
+        'confirmar_mantenimiento':{dot:'#534AB7',bg:'#EEEDFE',text:'#3C3489',label:'Mantenimiento ejecutado'}
+      };
+      const defaultColor={dot:'#888780',bg:'#F1EFE8',text:'#5F5E5A',label:null};
+      var html=
+        '<div style="position:relative;padding-left:28px;">'+
+        '<div style="position:absolute;left:7px;top:12px;bottom:12px;width:2px;background:var(--border-light,#e5e7eb);"></div>';
+      rows.forEach(function(lg,i){
+        const dt=lg.created_at?new Date(lg.created_at):null;
+        const fecha=dt?dt.toLocaleDateString('es-GT'):'—';
+        const hora=dt?dt.toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'}):'—';
+        const c=colorMap[lg.accion]||defaultColor;
+        const label=c.label||lg.accion;
+        const isLast=(i===rows.length-1);
+        html+=
+          '<div style="position:relative;margin-bottom:'+(isLast?'0':'20px')+';">'+
+            '<div style="position:absolute;left:-21px;top:10px;width:14px;height:14px;border-radius:50%;background:'+c.dot+';border:2px solid var(--bg,#fff);z-index:1;flex-shrink:0;"></div>'+
+            '<div style="background:var(--surface,#fff);border:1px solid var(--border-light,#e5e7eb);border-radius:10px;padding:10px 14px;">'+
+              '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:6px;">'+
+                '<span style="font-size:.75rem;font-weight:600;background:'+c.bg+';color:'+c.text+';padding:3px 10px;border-radius:99px;">'+label+'</span>'+
+                '<span style="font-size:.75rem;color:var(--text-secondary);">'+fecha+' · '+hora+'</span>'+
+              '</div>'+
+              '<div style="font-size:.84rem;color:var(--text-primary);margin-bottom:4px;">'+lg.detalle+'</div>'+
+              '<div style="font-size:.75rem;color:var(--text-secondary);">👤 '+lg.usuario+'</div>'+
+            '</div>'+
+          '</div>';
+      });
+      html+=
+        '</div>'+
+        '<div style="margin-top:16px;padding:8px 12px;background:var(--surface-alt,#f8f9fa);border-radius:8px;font-size:.75rem;color:var(--text-secondary);display:flex;gap:14px;flex-wrap:wrap;">'+
+          '<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#1D9E75;margin-right:4px;vertical-align:-1px;"></span>Registro</span>'+
+          '<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#378ADD;margin-right:4px;vertical-align:-1px;"></span>Programación</span>'+
+          '<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#BA7517;margin-right:4px;vertical-align:-1px;"></span>Edición</span>'+
+          '<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#534AB7;margin-right:4px;vertical-align:-1px;"></span>Mantenimiento</span>'+
+          '<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#A32D2D;margin-right:4px;vertical-align:-1px;"></span>Eliminación</span>'+
+        '</div>';
+      logEl.innerHTML=html;
     }).catch(function(){
       const logEl=document.getElementById('rptLogBody');
-      if(logEl) logEl.innerHTML='<div class="alert alert-warning">No se pudo cargar la bitácora.</div>';
+      if(logEl) logEl.innerHTML='<div class="alert alert-warning">No se pudo cargar el historial.</div>';
     });
   sbFetch('mantenimientos','GET',{bien_id:'eq.'+id,order:'anio.desc,mes.desc',select:'*'})
     .then(function(r){
