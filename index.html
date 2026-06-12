@@ -829,7 +829,7 @@ td:has(.actions){white-space:nowrap;width:1px;}
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Foto</th><th>Código</th><th>Tipo</th><th>Marca</th><th>Año</th><th>Serie</th><th>Clasificación</th><th>Estado</th><th>Renglón</th><th>Acciones</th></tr>
+              <tr><th>Código</th><th>Tipo</th><th>Marca</th><th>Año</th><th>Serie</th><th>Clasificación</th><th>Estado</th><th>Renglón</th><th>Acciones</th></tr>
             </thead>
             <tbody id="bienesTable"></tbody>
           </table>
@@ -2655,7 +2655,6 @@ function renderBienes(){
   const eBadge={'Activo':'badge-green','En bodega':'badge-gray','En mantenimiento':'badge-orange','Deteriorado':'badge-gold','Obsoleto':'badge-red','Dado de baja':'badge-red'};
   // Vista escritorio (tabla)
   if(tb) tb.innerHTML=bienes.map(b=>`<tr>
-    <td>${b.foto?`<img src="${b.foto}" class="photo-thumb" alt="foto"/>`:'<span style="font-size:1.4rem;color:var(--border);">📷</span>'}</td>
     <td><span class="badge badge-blue" style="font-family:var(--mono)">${b.codigo}</span></td>
     <td>${b.tipo}</td><td>${b.marca}</td><td>${b.anio||'—'}</td>
     <td style="font-size:.78rem;font-family:var(--mono)">${b.serie||'—'}</td>
@@ -4410,7 +4409,10 @@ function reactivarUser(username){
 // ============================================================
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
-document.querySelectorAll('.modal-bg').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});});
+document.querySelectorAll('.modal-bg').forEach(m=>{m.addEventListener('click',e=>{
+  const protegidos=['bienModal','progModal','adminRegModal','editUserModal'];
+  if(e.target===m && !protegidos.includes(m.id)) m.classList.remove('open');
+});});
 
 // ============================================================
 // TOAST
