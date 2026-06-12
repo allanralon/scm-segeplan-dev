@@ -1967,6 +1967,13 @@ function gotoSection(id,navEl){
     }).catch(function(){hideSpinner();renderMantSelects();});
   }
   if(id==='secReport') renderReport();
+  if(id==='secReporteBienes'){
+    var bienSelEl=document.getElementById('rptBienSel');
+    var contEl=document.getElementById('rptBienContent');
+    initReporteBienes();
+    if(bienSelEl) bienSelEl.value='';
+    if(contEl) contEl.innerHTML='<div class="empty"><div class="empty-icon">📋</div><p>Seleccione un bien para ver su expediente completo.</p></div>';
+  }
   if(id==='secDatos') actualizarInfoConexion();
   if(id==='secUsers'){
     showSpinner('Cargando usuarios...');
@@ -3408,7 +3415,14 @@ function toggleMant(progId,month,done,bienId,anio){
       });
     }
     (done
-      ?registrarLog('confirmar_mantenimiento','Mantenimiento confirmado - prog:'+progId+' mes:'+(month+1),'seguimiento')
+      ?(function(){
+          var bCodMant=b?b.codigo:'—';
+          var mesNombre=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+          var mesLabel=mesNombre[month]||String(month+1);
+          var anioLabel=anio||new Date().getFullYear();
+          var tipoLabel=pgTM?pgTM.tipoMant:'—';
+          registrarLog('confirmar_mantenimiento',bCodMant+' — Mantenimiento ejecutado: '+tipoLabel+' '+mesLabel+' '+anioLabel,'bienes');
+        })()
       :registrarLog('desmarcar_mantenimiento','Mantenimiento desmarcado - prog:'+progId+' mes:'+(month+1),'seguimiento'));
     showToast(done?'\u2714 Mantenimiento confirmado':'\u21a9 Mantenimiento desmarcado');
     renderMant();renderDash();
@@ -4503,7 +4517,7 @@ function renderReporteBienes(){
       '<div class="card-title">🔧 Historial de Mantenimientos</div>'+
       '<div id="rptMantBody" style="text-align:center;padding:20px;color:var(--text-secondary);">⏳ Cargando historial...</div>'+
     '</div>';
-  sbFetch('log','GET',{accion:'like.*'+b.codigo+'*',order:'created_at.desc',select:'*'})
+  sbFetch('log','GET',{detalle:'like.*'+b.codigo+'*',order:'created_at.asc',select:'*'})
     .then(function(r){
       const logEl=document.getElementById('rptLogBody');
       if(!logEl) return;
