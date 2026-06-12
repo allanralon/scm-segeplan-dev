@@ -698,7 +698,11 @@ td:has(.actions){white-space:nowrap;width:1px;}
       <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>
       Seguimiento
     </div>
-    <div class="sidebar-nav-item" onclick="gotoSection('secReport',this)" data-section="secReport">
+    <div class="sidebar-nav-item" onclick="gotoSection('secReporteBienes',this);initReporteBienes();" data-section="secReporteBienes">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+    Reporte de Bienes
+  </div>
+  <div class="sidebar-nav-item" onclick="gotoSection('secReport',this)" data-section="secReport">
       <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
       Reporte
     </div>
@@ -800,7 +804,7 @@ td:has(.actions){white-space:nowrap;width:1px;}
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Foto</th><th>Código</th><th>Tipo</th><th>Marca</th><th>Año</th><th>Serie</th><th>Clasificación</th><th>Renglón</th><th>Acciones</th></tr>
+              <tr><th>Foto</th><th>Código</th><th>Tipo</th><th>Marca</th><th>Año</th><th>Serie</th><th>Clasificación</th><th>Estado</th><th>Renglón</th><th>Acciones</th></tr>
             </thead>
             <tbody id="bienesTable"></tbody>
           </table>
@@ -919,7 +923,29 @@ td:has(.actions){white-space:nowrap;width:1px;}
       <div id="reportContent"></div>
     </div>
 
-    <!-- USUARIOS -->
+    <!-- REPORTE DE BIENES -->
+  <div class="section" id="secReporteBienes">
+    <div class="page-header">
+      <h2><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg> Reporte de Bienes</h2>
+      <p>Expediente completo por bien: datos, bitácora de cambios e historial de mantenimientos</p>
+    </div>
+    <div class="card" style="padding:16px;margin-bottom:16px;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Seleccionar Bien</label>
+        <select id="rptBienSel" onchange="renderReporteBienes()" style="max-width:480px;">
+          <option value="">— Seleccionar bien —</option>
+        </select>
+      </div>
+    </div>
+    <div id="rptBienContent">
+      <div class="empty">
+        <div class="empty-icon">📋</div>
+        <p>Seleccione un bien para ver su expediente completo.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- USUARIOS -->
     <div class="section" id="secUsers">
       <div class="page-header">
         <h2><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Usuarios del Sistema</h2>
@@ -1074,7 +1100,13 @@ td:has(.actions){white-space:nowrap;width:1px;}
     <div class="nav-item" onclick="gotoSection('secBienes',this)"><span class="nav-icon" style="display:flex;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>Bienes</div>
     <div class="nav-item" onclick="gotoSection('secProg',this)"><span class="nav-icon" style="display:flex;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></span>Program.</div>
     <div class="nav-item" onclick="gotoSection('secMant',this)"><span class="nav-icon" style="display:flex;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></span>Seguim.</div>
-    <div class="nav-item" onclick="gotoSection('secReport',this)"><span class="nav-icon" style="display:flex;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>Reporte</div>
+    <div class="nav-item" onclick="gotoSection('secReporteBienes',this);initReporteBienes();">
+    <span class="nav-icon" style="display:flex;justify-content:center;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+    </span>
+    Bienes
+  </div>
+  <div class="nav-item" onclick="gotoSection('secReport',this)"><span class="nav-icon" style="display:flex;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>Reporte</div>
     <div class="nav-item" onclick="toggleMasMenu(this)" id="navMas"><span class="nav-icon">⋯</span>Más</div>
   </nav>
 
@@ -1361,7 +1393,26 @@ td:has(.actions){white-space:nowrap;width:1px;}
         <label>Descripción / Observaciones</label>
         <textarea id="bDesc" rows="2" placeholder="Detalle adicional del bien..."></textarea>
       </div>
-      <div class="section-divider">Fotografía del bien</div>
+      <div class="section-divider">Responsable y Estado</div>
+  <div class="form-row">
+    <div class="form-group">
+      <label>Responsable del Bien</label>
+      <input type="text" id="bResponsable" placeholder="Nombre de quien tiene a cargo el bien"/>
+    </div>
+    <div class="form-group">
+      <label>Estado del Bien</label>
+      <select id="bEstado" onchange="updateEstadoDesc()">
+        <option value="Activo">✅ Activo</option>
+        <option value="En bodega">📦 En bodega</option>
+        <option value="En mantenimiento">🔧 En mantenimiento</option>
+        <option value="Deteriorado">⚠️ Deteriorado</option>
+        <option value="Obsoleto">🚫 Obsoleto</option>
+        <option value="Dado de baja">❌ Dado de baja</option>
+      </select>
+      <p id="bEstadoDesc" style="margin-top:6px;font-size:.78rem;color:var(--text-secondary);min-height:18px;"></p>
+    </div>
+  </div>
+  <div class="section-divider">Fotografía del bien</div>
       <div class="form-group">
         <div class="photo-upload-wrap" onclick="document.getElementById('bFotoInput').click()">
           <div id="photoPlaceholder">
