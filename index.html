@@ -1761,7 +1761,9 @@ function mapBienFromSheet(r){
     delegacion:r.delegacion||'',
     foto:r.foto||null,
     creadoEn:r.created_at||'',
-    creadoPor:r.registrado_por||''
+    creadoPor:r.registrado_por||'',
+    responsable:r.responsable||'',
+    estado:r.estado||'Activo'
   };
 }
 function mapBienToSheet(b){
@@ -1780,7 +1782,9 @@ function mapBienToSheet(b){
     delegacion:b.delegacion||'',
     foto_url:b.foto||'',
     fecha_registro:b.creadoEn||new Date().toISOString(),
-    registrado_por:b.creadoPor||''
+    registrado_por:b.creadoPor||'',
+    responsable:b.responsable||'',
+    estado:b.estado||'Activo'
   };
 }
 function mapProgFromSheet(r){
@@ -2534,6 +2538,7 @@ function renderBienes(){
   }
   em.style.display='none';
   const cBadge={'Equipo Crítico':'badge-red','Alto Valor':'badge-gold','Equipo Sensible':'badge-orange'};
+  const eBadge={'Activo':'badge-green','En bodega':'badge-gray','En mantenimiento':'badge-orange','Deteriorado':'badge-gold','Obsoleto':'badge-red','Dado de baja':'badge-red'};
   // Vista escritorio (tabla)
   if(tb) tb.innerHTML=bienes.map(b=>`<tr>
     <td>${b.foto?`<img src="${b.foto}" class="photo-thumb" alt="foto"/>`:'<span style="font-size:1.4rem;color:var(--border);">📷</span>'}</td>
@@ -2541,6 +2546,7 @@ function renderBienes(){
     <td>${b.tipo}</td><td>${b.marca}</td><td>${b.anio||'—'}</td>
     <td style="font-size:.78rem;font-family:var(--mono)">${b.serie||'—'}</td>
     <td>${b.clasificacion?`<span class="badge ${cBadge[b.clasificacion]||'badge-gray'}">${b.clasificacion}</span>`:'—'}</td>
+    <td><span class="badge ${eBadge[b.estado||'Activo']||'badge-green'}">${b.estado||'Activo'}</span></td>
     <td style="font-size:.82rem;">${b.renglon||'—'}</td>
     <td><div class="actions">
       <button class="btn-icon btn-icon-view" onclick="verFicha('${b.id}')" title="Ver ficha"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -2557,8 +2563,9 @@ function renderBienes(){
       <div class="bien-card-info">
         <div class="bien-card-codigo">${b.codigo}</div>
         <div class="bien-card-nombre">${b.marca} ${b.anio||''}</div>
-        <div class="bien-card-meta">${b.tipo}${b.clasificacion?' · '+b.clasificacion:''}${b.renglon?' · Rglón: '+b.renglon:''}</div>
+        <div class="bien-card-meta">${b.tipo}${b.clasificacion?' · '+b.clasificacion:''}${b.renglon?' · Rglón: '+b.renglon:''}${b.responsable?' · '+b.responsable:''}</div>
         ${b.clasificacion?`<span class="badge ${cBadge[b.clasificacion]||'badge-gray'}" style="font-size:.68rem;">${b.clasificacion}</span>`:''}
+        <span class="badge ${eBadge[b.estado||'Activo']||'badge-green'}" style="font-size:.68rem;">${b.estado||'Activo'}</span>
         <div class="bien-card-actions">
           <button class="btn-icon btn-icon-view" onclick="verFicha('${b.id}')" title="Ver"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
           <button class="btn-icon btn-icon-edit" onclick="editBien('${b.id}')" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
@@ -2574,7 +2581,7 @@ function openBienModal(id){
   // Poblar Clasificación desde Sheets
   var clasifActual=id?(db.bienes.find(function(x){return x.id===id;})||{}).clasificacion||'':'';
   poblarSelectClasificacion(clasifActual);
-  ['bCodigo','bTipo','bMarca','bModelo','bSerie','bAnio','bPrecio','bDesc','bRenglon'].forEach(function(f){var el=document.getElementById(f);if(el)el.value='';});
+  ['bCodigo','bTipo','bMarca','bModelo','bSerie','bAnio','bPrecio','bDesc','bRenglon','bResponsable'].forEach(function(f){var el=document.getElementById(f);if(el)el.value='';});
   if(!id) document.getElementById('bClasificacion').value='';
   document.getElementById('bFotoPreview').style.display='none';
   document.getElementById('bFotoPreview').src='';
@@ -2603,6 +2610,8 @@ function openBienModal(id){
       document.getElementById('fotoInfo').innerHTML='📷 Foto existente &nbsp;·&nbsp; Tamaño: <strong>'+sizeComp+' MB</strong>';
       document.getElementById('fotoInfoWrap').style.display='flex';
     }
+    var bRespEl=document.getElementById('bResponsable');if(bRespEl)bRespEl.value=b.responsable||'';
+    var bEstEl=document.getElementById('bEstado');if(bEstEl){bEstEl.value=b.estado||'Activo';bEstEl.dispatchEvent(new Event('change'));}
   }
   openModal('bienModal');
 }
@@ -2639,6 +2648,8 @@ function saveBien(){
   if(!codigo||!tipo||!marca||!clasificacion){showToast('⚠️ Complete los campos obligatorios');return;}
   if(db.bienes.find(b=>b.codigo===codigo&&b.id!==editingBienId)){showToast('⚠️ Código ya existe');return;}
   const bModEl=document.getElementById('bModelo');
+  const responsable=document.getElementById('bResponsable')?document.getElementById('bResponsable').value.trim():'';
+  const estado=document.getElementById('bEstado')?document.getElementById('bEstado').value||'Activo':'Activo';
 
   // Payload con columnas exactas de Supabase
   const bienData={
@@ -2653,13 +2664,16 @@ function saveBien(){
     clasificacion:clasificacion,
     renglon:document.getElementById('bRenglon').value.trim()||'',
     delegacion:currentUser.delegacion||'',
-    foto:bFotoData||''
+    foto:bFotoData||'',
+    responsable:responsable,
+    estado:estado
   };
   // registrado_por solo en INSERT (no en PATCH)
   if(!editingBienId) bienData.registrado_por=currentUser.username;
 
   showSpinner('Guardando bien...');
   if(editingBienId){
+    const bOrig=db.bienes.find(b=>b.id===editingBienId)||{};
     // RPC — actualizar_bien
     callRPC('actualizar_bien',{
       p_id:editingBienId,
@@ -2674,7 +2688,9 @@ function saveBien(){
       p_renglon:bienData.renglon||null,
       p_delegacion:bienData.delegacion||null,
       p_descripcion:bienData.descripcion||null,
-      p_foto:bienData.foto||null
+      p_foto:bienData.foto||null,
+      p_responsable:bienData.responsable||null,
+      p_estado:bienData.estado||'Activo'
     }).then(function(data){
       hideSpinner();
       if(data&&data.code){apiErr(data.message||'Error al guardar bien');return;}
@@ -2684,7 +2700,16 @@ function saveBien(){
         if(r2.ok&&Array.isArray(r2.data)) db.bienes=r2.data.map(mapBienFromSheet);
         closeModal('bienModal');
         renderBienes();renderDash();
-        registrarLog('editar_bien','Bien editado: '+codigo,'bienes');
+        const cambios=[];
+        if(bOrig.codigo!==bienData.codigo) cambios.push('Código: '+bOrig.codigo+' → '+bienData.codigo);
+        if(bOrig.tipo!==bienData.tipo) cambios.push('Tipo: '+bOrig.tipo+' → '+bienData.tipo);
+        if(bOrig.marca!==bienData.marca) cambios.push('Marca: '+bOrig.marca+' → '+bienData.marca);
+        if((bOrig.responsable||'')!==bienData.responsable) cambios.push('Responsable: '+(bOrig.responsable||'—')+' → '+(bienData.responsable||'—'));
+        if((bOrig.estado||'Activo')!==bienData.estado) cambios.push('Estado: '+(bOrig.estado||'Activo')+' → '+bienData.estado);
+        if((bOrig.clasificacion||'')!==bienData.clasificacion) cambios.push('Clasificación: '+(bOrig.clasificacion||'—')+' → '+(bienData.clasificacion||'—'));
+        if((bOrig.renglon||'')!==bienData.renglon) cambios.push('Renglón: '+(bOrig.renglon||'—')+' → '+(bienData.renglon||'—'));
+        const detalleCambio=cambios.length>0?cambios.join(' | '):'Sin cambios registrados';
+        registrarLog('editar_bien',codigo+' — '+detalleCambio,'bienes');
         showToast('✅ Bien actualizado');
         editingBienId=null; bFotoData=null;
       }).catch(function(){
@@ -2718,7 +2743,9 @@ function saveBien(){
         p_delegacion:bienObj.delegacion||null,
         p_descripcion:bienObj.descripcion||null,
         p_foto:bienObj.foto||null,
-        p_registrado_por:bienObj.registrado_por||null
+        p_registrado_por:bienObj.registrado_por||null,
+        p_responsable:bienObj.responsable||null,
+        p_estado:bienObj.estado||'Activo'
       })
     }).then(function(r){return r.json();})
     .then(function(data){
@@ -4286,6 +4313,8 @@ function verFicha(id){
         '<div><span style="color:var(--text-secondary);display:block;">Año/Modelo</span><strong>'+(b.anio||'—')+'</strong></div>'+
         '<div><span style="color:var(--text-secondary);display:block;">Precio del Bien</span><strong>Q '+((b.precio||0).toLocaleString())+'</strong></div>'+
         '<div><span style="color:var(--text-secondary);display:block;">Delegación</span><strong>'+(b.delegacion||'—')+'</strong></div>'+
+        '<div><span style="color:var(--text-secondary);display:block;">Responsable</span><strong>'+(b.responsable||'—')+'</strong></div>'+
+        '<div><span style="color:var(--text-secondary);display:block;">Estado</span><strong>'+(b.estado||'Activo')+'</strong></div>'+
         '<div><span style="color:var(--text-secondary);display:block;">Registrado por</span><strong>'+(b.creadoPor||'—')+'</strong></div>'+
         '<div><span style="color:var(--text-secondary);display:block;">Fecha de registro</span><strong>'+(b.creadoEn?b.creadoEn.split('T')[0]:'—')+'</strong></div>'+
       '</div>'+
@@ -4338,6 +4367,136 @@ function verFicha(id){
     // Fallback: mostrar programaciones sin estado de ejecución
     renderizarHistorialFicha({},progs);
   });
+}
+
+// Renderiza el historial dentro de #fichaHistorialBody usando fichaMap local
+// fichaMap clave: id_programacion + '_' + nombre_mes (ej. "pg123_Marzo")
+function updateEstadoDesc(){
+  const descripciones={
+    'Activo':           'El bien está en uso y en buenas condiciones operativas.',
+    'En bodega':        'El bien está disponible pero no se encuentra en uso actualmente.',
+    'En mantenimiento': 'El bien está fuera de servicio temporalmente por mantenimiento.',
+    'Deteriorado':      'El bien funciona pero presenta desgaste visible o fallas menores.',
+    'Obsoleto':         'El bien ha superado su vida útil y ya no se utiliza.',
+    'Dado de baja':     'El bien fue retirado definitivamente del inventario.'
+  };
+  const val=document.getElementById('bEstado').value;
+  const el=document.getElementById('bEstadoDesc');
+  if(el) el.textContent=descripciones[val]||'';
+}
+
+function initReporteBienes(){
+  const sel=document.getElementById('rptBienSel');
+  if(!sel) return;
+  sel.innerHTML='<option value="">— Seleccionar bien —</option>'+
+    bienesVisibles().map(b=>
+      '<option value="'+b.id+'">'+b.codigo+' — '+b.tipo+' '+b.marca+'</option>'
+    ).join('');
+}
+
+function renderReporteBienes(){
+  const id=document.getElementById('rptBienSel').value;
+  const cont=document.getElementById('rptBienContent');
+  if(!id){cont.innerHTML='<div class="empty"><div class="empty-icon">📋</div><p>Seleccione un bien para ver su expediente completo.</p></div>';return;}
+  const b=db.bienes.find(x=>x.id===id);
+  if(!b){cont.innerHTML='<div class="alert alert-warning">Bien no encontrado.</div>';return;}
+  const cBadge={'Equipo Crítico':'badge-red','Alto Valor':'badge-gold','Equipo Sensible':'badge-orange'};
+  const eBadge={'Activo':'badge-green','En bodega':'badge-gray','En mantenimiento':'badge-orange','Deteriorado':'badge-gold','Obsoleto':'badge-red','Dado de baja':'badge-red'};
+  cont.innerHTML=
+    '<div class="card">'+
+      '<div class="card-title">📋 Datos Actuales del Bien</div>'+
+      '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">'+
+        (b.foto?'<img src="'+b.foto+'" style="width:100px;height:100px;object-fit:cover;border-radius:8px;border:2px solid var(--border);flex-shrink:0;" alt="foto"/>':'')+
+        '<div style="flex:1;min-width:200px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;font-size:.85rem;">'+
+          '<div><span style="color:var(--text-secondary);display:block;">Código</span><strong style="font-family:var(--mono)">'+b.codigo+'</strong></div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Tipo</span><strong>'+b.tipo+'</strong></div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Marca / Modelo</span><strong>'+b.marca+(b.modelo?' '+b.modelo:'')+'</strong></div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Año</span><strong>'+(b.anio||'—')+'</strong></div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Serie</span><strong style="font-family:var(--mono);font-size:.78rem;">'+(b.serie||'—')+'</strong></div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Precio</span><strong>Q '+((b.precio||0).toLocaleString())+'</strong></div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Clasificación</span>'+
+            (b.clasificacion?'<span class="badge '+(cBadge[b.clasificacion]||'badge-gray')+'">'+b.clasificacion+'</span>':'<strong>—</strong>')+
+          '</div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Renglón</span><strong>'+(b.renglon||'—')+'</strong></div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Delegación</span><strong>'+(b.delegacion||'—')+'</strong></div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Responsable</span><strong>'+(b.responsable||'—')+'</strong></div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Estado</span>'+
+            '<span class="badge '+(eBadge[b.estado||'Activo']||'badge-green')+'">'+(b.estado||'Activo')+'</span>'+
+          '</div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Registrado por</span><strong>'+(b.creadoPor||'—')+'</strong></div>'+
+          '<div><span style="color:var(--text-secondary);display:block;">Fecha registro</span><strong>'+(b.creadoEn?b.creadoEn.split('T')[0]:'—')+'</strong></div>'+
+        '</div>'+
+      '</div>'+
+      (b.desc?'<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:.85rem;color:var(--text-secondary);">'+b.desc+'</div>':'')+
+    '</div>'+
+    '<div class="card" id="rptLogCard">'+
+      '<div class="card-title">🗂️ Bitácora de Cambios</div>'+
+      '<div id="rptLogBody" style="text-align:center;padding:20px;color:var(--text-secondary);">⏳ Cargando bitácora...</div>'+
+    '</div>'+
+    '<div class="card" id="rptMantCard">'+
+      '<div class="card-title">🔧 Historial de Mantenimientos</div>'+
+      '<div id="rptMantBody" style="text-align:center;padding:20px;color:var(--text-secondary);">⏳ Cargando historial...</div>'+
+    '</div>';
+  sbFetch('log','GET',{accion:'like.*'+b.codigo+'*',order:'created_at.desc',select:'*'})
+    .then(function(r){
+      const logEl=document.getElementById('rptLogBody');
+      if(!logEl) return;
+      const rows=(r.ok&&Array.isArray(r.data))?r.data:[];
+      if(rows.length===0){
+        logEl.innerHTML='<div class="alert alert-info">Sin registros en la bitácora para este bien.</div>';
+      } else {
+        logEl.innerHTML=
+          '<div class="table-wrap"><table>'+
+          '<thead><tr><th>Fecha</th><th>Hora</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead>'+
+          '<tbody>'+rows.map(function(lg){
+            const dt=lg.created_at?new Date(lg.created_at):null;
+            const fecha=dt?dt.toLocaleDateString('es-GT'):'—';
+            const hora=dt?dt.toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'}):'—';
+            const accionLabel={'crear_bien':'Registro inicial','editar_bien':'Edición','eliminar_bien':'Eliminación'}[lg.accion]||lg.accion;
+            return '<tr>'+
+              '<td style="font-size:.82rem;">'+fecha+'</td>'+
+              '<td style="font-size:.82rem;font-family:var(--mono)">'+hora+'</td>'+
+              '<td style="font-size:.82rem;font-family:var(--mono)">'+lg.usuario+'</td>'+
+              '<td><span class="badge '+(lg.accion==='crear_bien'?'badge-green':lg.accion==='eliminar_bien'?'badge-red':'badge-blue')+'">'+accionLabel+'</span></td>'+
+              '<td style="font-size:.82rem;">'+lg.detalle+'</td>'+
+            '</tr>';
+          }).join('')+
+          '</tbody></table></div>';
+      }
+    }).catch(function(){
+      const logEl=document.getElementById('rptLogBody');
+      if(logEl) logEl.innerHTML='<div class="alert alert-warning">No se pudo cargar la bitácora.</div>';
+    });
+  sbFetch('mantenimientos','GET',{bien_id:'eq.'+id,order:'anio.desc,mes.desc',select:'*'})
+    .then(function(r){
+      const mantEl=document.getElementById('rptMantBody');
+      if(!mantEl) return;
+      const rows=(r.ok&&Array.isArray(r.data))?r.data:[];
+      if(rows.length===0){
+        mantEl.innerHTML='<div class="alert alert-info">Sin mantenimientos registrados para este bien.</div>';
+      } else {
+        mantEl.innerHTML=
+          '<div class="table-wrap"><table>'+
+          '<thead><tr><th>Año</th><th>Mes</th><th>Tipo</th><th>Estado</th><th>Fecha Ejec.</th><th>Ejecutado por</th><th>Observaciones</th></tr></thead>'+
+          '<tbody>'+rows.map(function(m){
+            const prog=db.programaciones.find(function(p){return p.id===m.programacion_id;})||{};
+            const ejecutado=m.estado==='ejecutado';
+            return '<tr>'+
+              '<td>'+m.anio+'</td>'+
+              '<td>'+(MONTHS[m.mes-1]||m.mes)+'</td>'+
+              '<td style="font-size:.82rem;">'+(prog.tipoMant||'—')+'</td>'+
+              '<td><span class="badge '+(ejecutado?'badge-green':'badge-orange')+'">'+(ejecutado?'Ejecutado':'Pendiente')+'</span></td>'+
+              '<td style="font-size:.82rem;">'+(m.fecha_ejecucion?String(m.fecha_ejecucion).split('T')[0]:'—')+'</td>'+
+              '<td style="font-size:.82rem;font-family:var(--mono)">'+(m.ejecutado_por||'—')+'</td>'+
+              '<td style="font-size:.82rem;">'+(m.observacion||'—')+'</td>'+
+            '</tr>';
+          }).join('')+
+          '</tbody></table></div>';
+      }
+    }).catch(function(){
+      const mantEl=document.getElementById('rptMantBody');
+      if(mantEl) mantEl.innerHTML='<div class="alert alert-warning">No se pudo cargar el historial de mantenimientos.</div>';
+    });
 }
 
 // Renderiza el historial dentro de #fichaHistorialBody usando fichaMap local
