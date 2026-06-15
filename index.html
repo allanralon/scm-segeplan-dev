@@ -3794,7 +3794,8 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
 
   // ── Delegation data ──
   var delegsUniq=[...new Set(bienes.map(function(b){return b.delegacion||'Sin delegaci\u00f3n';}))];
-  var delegData=delegsUniq.map(function(d){
+  window._rptDelegData=delegsUniq.map(function(d){
+  var delegData=window._rptDelegData;
     var bienesDel=bienes.filter(function(b){return (b.delegacion||'Sin delegaci\u00f3n')===d;});
     var dp=0,de=0,dcp=0,dce=0;
     bienesDel.forEach(function(b){
@@ -4031,6 +4032,7 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
   if(currentUser.rol==='admin'){
     // Sort delegData by pcosto desc for top5
     var top5=delegData.slice().sort(function(a,b){return b.pcosto-a.pcosto;}).slice(0,5);
+  window._rptTop5=top5;
     var rankColors=['#d4af37','#9aa5b4','#c49a6c','',''];
     var rankBg=['#d4af37','#9aa5b4','#c49a6c','var(--bg)','var(--bg)'];
     var rankFg=['#fff','#fff','#fff','var(--text-secondary)','var(--text-secondary)'];
@@ -4323,8 +4325,10 @@ function exportarPDF(){
 
   // Comparativa por delegación — leer desde delegData (variable en scope de _renderReportUI)
   let delegRows='';
-  if(isAdmin && typeof delegData !== 'undefined' && delegData.length>0){
-    delegData.forEach(function(dd){
+  const _delegData=window._rptDelegData||[];
+  const _top5=window._rptTop5||[];
+  if(isAdmin && _delegData.length>0){
+    _delegData.forEach(function(dd){
       const pcolorBg=dd.pcosto>=80?'#E8F5EE':dd.pcosto>=50?'#FEF3E2':'#FDECEA';
       const pcolorFg=dd.pcosto>=80?'#1A7A45':dd.pcosto>=50?'#B7651A':'#C0392B';
       const ecolorBg=dd.pejec>=80?'#E8F5EE':dd.pejec>=50?'#FEF3E2':'#FDECEA';
@@ -4341,15 +4345,85 @@ function exportarPDF(){
 
   // Capturar gráficas como imagen PNG antes de construir el HTML
   let eficImgSrc='';
+  let presupImgSrc='';
   let mesImgSrc='';
-  try{
-    const eficCanvas=document.getElementById('_rptEficCanvas');
-    if(eficCanvas) eficImgSrc=eficCanvas.toDataURL('image/png');
-  }catch(e){}
+  // Capturar gráfica Mes desde canvas Chart.js
   try{
     const mesCanvas=document.getElementById('_rptMesCanvas');
     if(mesCanvas) mesImgSrc=mesCanvas.toDataURL('image/png');
   }catch(e){}
+  // Eficiencia Global y Presupuesto son HTML puro — leer valores del DOM
+  try{
+    let eficCardEl=null;
+    document.querySelectorAll('#secReport .card').forEach(function(c){
+      if(c.textContent.includes('Eficiencia Global')) eficCardEl=c;
+    });
+    if(eficCardEl){
+      const pct=eficCardEl.querySelector('[style*="color:var(--success)"]')?.textContent?.trim()||'—';
+      const exec=eficCardEl.querySelectorAll('strong')[0]?.textContent?.trim()||'—';
+      const pend=eficCardEl.querySelectorAll('strong')[1]?.textContent?.trim()||'—';
+      const total=eficCardEl.querySelectorAll('strong')[2]?.textContent?.trim()||'—';
+      const avance=eficCardEl.querySelector('[style*="background:var(--success)"]')?.style?.width||'0%';
+      eficImgSrc=JSON.stringify({pct:pct,exec:exec,pend:pend,total:total,avance:avance});
+    }
+  }catch(e){}
+  try{
+    let presupCardEl=null;
+    document.querySelectorAll('#secReport .card').forEach(function(c){
+      if(c.textContent.includes('Presupuesto vs Ejecu\u00f3n')||c.textContent.includes('Presupuesto vs Ejecuci\u00f3n')) presupCardEl=c;
+    });
+    if(presupCardEl){
+      const vals=presupCardEl.querySelectorAll('[style*="font-weight:600"],[style*="font-weight: 600"]');
+      const presup=vals[0]?.textContent?.trim()||'—';
+      const exec=vals[1]?.textContent?.trim()||'—';
+      const saldo=vals[2]?.textContent?.trim()||'—';
+      const barWidth=presupCardEl.querySelector('[style*="background:#2D5FBF"],[style*="background:var(--primary)"]')?.style?.width||'0%';
+      presupImgSrc=JSON.stringify({presup:presup,exec:exec,saldo:saldo,bar:barWidth});
+    }
+  }catch(e){}
+
+  const eficData=eficImgSrc?JSON.parse(eficImgSrc):null;
+  const presupData=presupImgSrc?JSON.parse(presupImgSrc):null;
+
+  var graficasBlock=
+    '<div style="display:grid;grid-template-columns:1fr 1.8fr;gap:10px;margin-bottom:12px;">'+
+      '<div style="display:flex;flex-direction:column;gap:8px;">'+
+        (eficData?
+        '<div style="background:#F4F6FA;border-radius:8px;padding:10px;border:1px solid #E2E6EF;">'+
+          '<div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">Eficiencia Global</div>'+
+          '<div style="display:flex;align-items:center;gap:12px;">'+
+            '<div style="width:60px;height:60px;flex-shrink:0;background:conic-gradient(#1A7A45 '+eficData.avance+', #E2E6EF 0);border-radius:50%;display:flex;align-items:center;justify-content:center;">'+
+              '<div style="width:44px;height:44px;background:#F4F6FA;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;color:#1A7A45;">'+eficData.pct+'</div>'+
+            '</div>'+
+            '<div>'+
+              '<div style="font-size:9px;color:#4A5568;margin-bottom:3px;">Ejecutados: <strong style="color:#1A7A45;">'+eficData.exec+'</strong></div>'+
+              '<div style="font-size:9px;color:#4A5568;margin-bottom:3px;">Pendientes: <strong style="color:#B7651A;">'+eficData.pend+'</strong></div>'+
+              '<div style="font-size:9px;color:#4A5568;">Total: <strong>'+eficData.total+'</strong></div>'+
+            '</div>'+
+          '</div>'+
+          '<div style="margin-top:8px;background:#E2E6EF;border-radius:99px;height:5px;overflow:hidden;">'+
+            '<div style="width:'+eficData.avance+';height:100%;background:#1A7A45;border-radius:99px;"></div>'+
+          '</div>'+
+        '</div>':'')+ 
+        (presupData?
+        '<div style="background:#F4F6FA;border-radius:8px;padding:10px;border:1px solid #E2E6EF;">'+
+          '<div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">Presupuesto vs Ejecuci\u00f3n</div>'+
+          '<div style="display:flex;gap:10px;margin-bottom:8px;">'+
+            '<div><div style="font-size:8px;color:#8A93A8;">Presupuestado</div><div style="font-size:12px;font-weight:bold;color:#0F1A33;">'+presupData.presup+'</div></div>'+
+            '<div><div style="font-size:8px;color:#8A93A8;">Ejecutado</div><div style="font-size:12px;font-weight:bold;color:#1A7A45;">'+presupData.exec+'</div></div>'+
+            '<div><div style="font-size:8px;color:#8A93A8;">Saldo</div><div style="font-size:12px;font-weight:bold;color:#B7651A;">'+presupData.saldo+'</div></div>'+
+          '</div>'+
+          '<div style="background:#E2E6EF;border-radius:99px;height:5px;overflow:hidden;">'+
+            '<div style="width:'+presupData.bar+';height:100%;background:#2D5FBF;border-radius:99px;"></div>'+
+          '</div>'+
+        '</div>':'')+ 
+      '</div>'+
+      (mesImgSrc?
+      '<div style="background:#F4F6FA;border-radius:8px;padding:10px;border:1px solid #E2E6EF;">'+
+        '<div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Ejecuci\u00f3n por Mes \u00b7 '+year+'</div>'+
+        '<img src="'+mesImgSrc+'" style="width:100%;height:auto;border-radius:4px;"/>'+
+      '</div>':'')+ 
+    '</div>';
 
   const subtituloFiltro='Delegación: '+(filtroDepto||'Todas')+
     (filtroClasif?' · '+filtroClasif:'')+
@@ -4422,19 +4496,7 @@ function exportarPDF(){
       </div>
     </div>
 
-    ${eficImgSrc||mesImgSrc?`
-    <div style="display:grid;grid-template-columns:${eficImgSrc&&mesImgSrc?'1fr 1.8fr':'1fr'};gap:10px;margin-bottom:12px;">
-      ${eficImgSrc?`
-      <div style="background:#F4F6FA;border-radius:8px;padding:10px;border:1px solid #E2E6EF;">
-        <div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Eficiencia Global</div>
-        <img src="${eficImgSrc}" style="width:100%;height:auto;border-radius:4px;"/>
-      </div>`:''}
-      ${mesImgSrc?`
-      <div style="background:#F4F6FA;border-radius:8px;padding:10px;border:1px solid #E2E6EF;">
-        <div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Ejecución por Mes · ${year}</div>
-        <img src="${mesImgSrc}" style="width:100%;height:auto;border-radius:4px;"/>
-      </div>`:''}
-    </div>`:''}
+    ${graficasBlock}
 
     <div style="font-size:9px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">📋 Detalle por Bien</div>
     <table style="width:100%;border-collapse:collapse;font-size:9.5px;margin-bottom:12px;">
@@ -4480,7 +4542,24 @@ function exportarPDF(){
         </tr>
       </thead>
       <tbody>${delegRows}</tbody>
-    </table>`:''}
+    </table>
+    ${_top5.length>0?`
+    <div style="margin-top:10px;">
+      <div style="font-size:8px;font-weight:bold;color:#8A93A8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Top 5 — Mayor ejecución presupuestaria</div>
+      ${_top5.map(function(dd,i){
+        const valColor=dd.pcosto>=80?'#1A7A45':dd.pcosto>=50?'#B7651A':'#C0392B';
+        return '<div style="background:#F4F6FA;border-radius:6px;padding:8px 10px;display:flex;align-items:center;gap:10px;margin-bottom:5px;">'+
+          '<div style="width:20px;height:20px;background:#2D5FBF;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;color:#fff;flex-shrink:0;">'+(i+1)+'</div>'+
+          '<div style="flex:1;"><div style="font-size:10px;font-weight:500;color:#0F1A33;">'+dd.d+'</div>'+
+          '<div style="font-size:8.5px;color:#8A93A8;">'+dd.n+' bien'+(dd.n!==1?'es':'')+' · Q '+dd.dce.toLocaleString()+' ejec.</div></div>'+
+          '<div style="text-align:right;"><span style="font-size:11px;font-weight:bold;color:'+valColor+';">'+dd.pcosto+'%</span>'+
+          '<div style="font-size:8px;color:#8A93A8;">presup.</div></div>'+
+        '</div>';
+      }).join('')}
+    </div>`:''}
+  </div>`:''}
+
+  </div>
 
   </div>
 
