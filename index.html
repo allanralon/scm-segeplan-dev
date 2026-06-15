@@ -628,6 +628,8 @@ td:has(.actions){white-space:nowrap;width:1px;}
 }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
 </head>
 </head>
@@ -955,11 +957,23 @@ td:has(.actions){white-space:nowrap;width:1px;}
       <p>Expediente completo por bien: datos, bitácora de cambios e historial de mantenimientos</p>
     </div>
     <div class="card" style="padding:16px;margin-bottom:16px;">
-      <div class="form-group" style="margin-bottom:0;">
-        <label>Seleccionar Bien</label>
-        <select id="rptBienSel" onchange="renderReporteBienes()" style="max-width:480px;">
-          <option value="">— Seleccionar bien —</option>
-        </select>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin-bottom:0;flex:1;min-width:200px;">
+          <label>Seleccionar Bien</label>
+          <select id="rptBienSel" onchange="renderReporteBienes()">
+            <option value="">— Seleccionar bien —</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;padding-bottom:2px;">
+          <button id="btnExportarExpediente" class="btn btn-primary btn-sm" onclick="exportarPDFExpediente()" disabled style="opacity:.45;cursor:not-allowed;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+            Exportar expediente
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="exportarPDFListaBienes()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+            Exportar lista completa
+          </button>
+        </div>
       </div>
     </div>
     <div id="rptBienContent">
@@ -4525,6 +4539,298 @@ function updateEstadoDesc(){
   if(el) el.textContent=descripciones[val]||'';
 }
 
+function _pdfHeader(doc,pageW,titulo,subtitulo){
+  const logoUrl='https://raw.githubusercontent.com/allanralon/scm-segeplan-dev/main/logo.png';
+  doc.setFillColor(27,58,107);
+  doc.rect(0,0,pageW,28,'F');
+  try{
+    doc.setFillColor(255,255,255);
+    doc.roundedRect(6,4,20,20,2,2,'F');
+    doc.addImage(logoUrl,'PNG',7,5,18,18);
+  }catch(e){}
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(10);
+  doc.setFont('helvetica','bold');
+  doc.text('Secretaría de Planificación y Programación de la Presidencia',30,11);
+  doc.setFontSize(8);
+  doc.setFont('helvetica','normal');
+  doc.setTextColor(168,191,223);
+  doc.text('-SEGEPLAN- · Sistema de Control de Mantenimiento',30,17);
+  const fecha=new Date().toLocaleDateString('es-GT');
+  doc.setFontSize(7.5);
+  doc.setTextColor(168,191,223);
+  doc.text('Generado: '+fecha,pageW-6,11,{align:'right'});
+  doc.text('Por: '+(currentUser?currentUser.nombre||currentUser.username:'—'),pageW-6,17,{align:'right'});
+  doc.setFillColor(45,95,191);
+  doc.rect(0,28,pageW,9,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(9);
+  doc.setFont('helvetica','bold');
+  doc.text(titulo,6,34);
+  if(subtitulo){
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.setTextColor(168,191,223);
+    doc.text(subtitulo,pageW-6,34,{align:'right'});
+  }
+  return 42;
+}
+function exportarPDFListaBienes(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const pageW=297;
+  const isAdmin=currentUser&&currentUser.rol==='admin';
+  const delegacion=currentUser?currentUser.delegacion||'Todas':'Todas';
+  const bienes=isAdmin?db.bienes:[...db.bienes].filter(b=>(b.delegacion||'')===(currentUser?currentUser.delegacion:''));
+  const subtitulo='Delegación: '+(isAdmin?'Todas':delegacion)+' · '+bienes.length+' bienes';
+  let y=_pdfHeader(doc,pageW,'Reporte General de Bienes Institucionales',subtitulo);
+  const activos=bienes.filter(b=>(b.estado||'Activo')==='Activo').length;
+  const deteriorados=bienes.filter(b=>b.estado==='Deteriorado').length;
+  const obsoletos=bienes.filter(b=>b.estado==='Obsoleto').length;
+  doc.setFillColor(244,246,250);
+  doc.rect(0,y-2,pageW,8,'F');
+  doc.setFontSize(8);
+  doc.setTextColor(74,85,104);
+  doc.setFont('helvetica','normal');
+  doc.text('Activos: '+activos+'   Deteriorados: '+deteriorados+'   Obsoletos: '+obsoletos+'   Total: '+bienes.length+' bienes',6,y+3);
+  y+=10;
+  const cols=[
+    {label:'Código',w:22},{label:'Tipo',w:22},{label:'Marca/Modelo',w:30},
+    {label:'Año',w:13},{label:'Serie',w:26},{label:'Precio',w:18},
+    {label:'Clasificación',w:24},{label:'Renglón',w:22},{label:'Delegación',w:22},
+    {label:'Responsable',w:28},{label:'Estado',w:18},{label:'Registrado por',w:22}
+  ];
+  doc.setFillColor(27,58,107);
+  doc.rect(0,y,pageW,7,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(7);
+  doc.setFont('helvetica','bold');
+  let x=4;
+  cols.forEach(function(c){doc.text(c.label,x,y+5);x+=c.w;});
+  y+=7;
+  const estadoColors={
+    'Activo':[26,122,69],'En bodega':[138,147,168],'En mantenimiento':[183,101,26],
+    'Deteriorado':[183,101,26],'Obsoleto':[192,57,43],'Dado de baja':[192,57,43]
+  };
+  bienes.forEach(function(b,i){
+    if(y>190){doc.addPage();y=15;}
+    doc.setFillColor(i%2===0?255:248,i%2===0?255:249,i%2===0?255:252);
+    doc.rect(0,y,pageW,6,'F');
+    doc.setTextColor(15,26,51);
+    doc.setFontSize(7);
+    doc.setFont('helvetica','normal');
+    const vals=[
+      b.codigo||'—',b.tipo||'—',(b.marca||'')+(b.modelo?' '+b.modelo:''),
+      String(b.anio||'—'),b.serie||'SN','Q '+(b.precio?Number(b.precio).toLocaleString():'0'),
+      b.clasificacion||'—',b.renglon||'—',b.delegacion||'—',
+      b.responsable||'—',b.estado||'Activo',b.creadoPor||'—'
+    ];
+    x=4;
+    vals.forEach(function(v,vi){
+      if(vi===10){
+        const ec=estadoColors[v]||[138,147,168];
+        doc.setTextColor(ec[0],ec[1],ec[2]);
+        doc.text(v,x,y+4.5);
+        doc.setTextColor(15,26,51);
+      } else {
+        const maxW=cols[vi].w-2;
+        const txt=doc.splitTextToSize(String(v),maxW)[0]||'';
+        doc.text(txt,x,y+4.5);
+      }
+      x+=cols[vi].w;
+    });
+    y+=6;
+    doc.setDrawColor(240,242,248);
+    doc.line(0,y,pageW,y);
+  });
+  doc.setFillColor(244,246,250);
+  doc.rect(0,200,pageW,10,'F');
+  doc.setFontSize(7);
+  doc.setTextColor(138,147,168);
+  doc.text('SCM SEGEPLAN · Sistema de Control de Mantenimiento',6,206);
+  doc.text('Página 1 de 1',pageW-6,206,{align:'right'});
+  doc.save('reporte-bienes-'+new Date().toISOString().split('T')[0]+'.pdf');
+  registrarLog('exportar_pdf_bienes','Lista completa de bienes exportada en PDF','datos');
+}
+function exportarPDFExpediente(){
+  const id=document.getElementById('rptBienSel').value;
+  if(!id){showToast('Seleccione un bien primero.');return;}
+  const b=db.bienes.find(function(x){return x.id===id;});
+  if(!b){showToast('Bien no encontrado.');return;}
+  const logoUrl='https://raw.githubusercontent.com/allanralon/scm-segeplan-dev/main/logo.png';
+  const fecha=new Date().toLocaleDateString('es-GT');
+  const usuario=currentUser?currentUser.nombre||currentUser.username:'—';
+  const delegacion=currentUser?currentUser.delegacion||'—':'—';
+  const eBadge={'Activo':'#E8F5EE;color:#1A7A45','En bodega':'#F4F6FA;color:#4A5568','En mantenimiento':'#FEF3E2;color:#B7651A','Deteriorado':'#FEF3E2;color:#B7651A','Obsoleto':'#FDECEA;color:#C0392B','Dado de baja':'#FDECEA;color:#C0392B'};
+  const cBadge={'Equipo Crítico':'#FDECEA;color:#C0392B','Alto Valor':'#FEF3E2;color:#B7651A','Equipo Sensible':'#FFF8E1;color:#9A7D0A'};
+  const estadoStyle=eBadge[b.estado||'Activo']||'#E8F5EE;color:#1A7A45';
+  const clasifStyle=cBadge[b.clasificacion]||'#F4F6FA;color:#4A5568';
+  sbFetch('log','GET',{detalle:'like.*'+b.codigo+'*',order:'created_at.asc',select:'*'})
+  .then(function(r){
+    const logs=(r.ok&&Array.isArray(r.data))?r.data:[];
+    const colorMap={
+      'crear_bien':'background:#E8F5EE;color:#1A7A45','editar_bien':'background:#FAEEDA;color:#854F0B',
+      'eliminar_bien':'background:#FDECEA;color:#C0392B','crear_programacion':'background:#EBF0FB;color:#2D5FBF',
+      'editar_programacion':'background:#EBF0FB;color:#2D5FBF','eliminar_programacion':'background:#FDECEA;color:#C0392B',
+      'confirmar_mantenimiento':'background:#EEEDFE;color:#534AB7'
+    };
+    const labelMap={
+      'crear_bien':'Registro inicial','editar_bien':'Edición','eliminar_bien':'Eliminación',
+      'crear_programacion':'Nueva programación','editar_programacion':'Programación editada',
+      'eliminar_programacion':'Programación eliminada','confirmar_mantenimiento':'Mantenimiento ejecutado'
+    };
+    const dotMap={
+      'crear_bien':'#1A7A45','editar_bien':'#BA7517','eliminar_bien':'#C0392B',
+      'crear_programacion':'#2D5FBF','editar_programacion':'#2D5FBF',
+      'eliminar_programacion':'#C0392B','confirmar_mantenimiento':'#534AB7'
+    };
+    const mantenimientos=db.seguimientos?db.seguimientos.filter(function(s){
+      const prog=db.programaciones.find(function(p){return p.id===s.programacion_id;});
+      return prog&&prog.bienId===id;
+    }):[];
+    const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const ejecutados=mantenimientos.filter(function(m){return m.estado==='ejecutado';});
+    const pendientes=mantenimientos.filter(function(m){return m.estado!=='ejecutado';});
+    const costoTotal=ejecutados.reduce(function(acc,m){return acc+(parseFloat(m.costo_ejecutado)||0);},0);
+    const htmlContent=`
+<div style="font-family:Arial,sans-serif;width:190mm;margin:0 auto;padding:0;background:#fff;">
+  <div style="background:#1B3A6B;padding:14px 18px;display:flex;align-items:center;gap:12px;">
+    <div style="background:#fff;border-radius:8px;padding:4px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <img src="${logoUrl}" width="30" height="30" style="object-fit:contain;"/>
+    </div>
+    <div style="flex:1;">
+      <div style="font-size:11px;font-weight:bold;color:#fff;">Secretaría de Planificación y Programación de la Presidencia</div>
+      <div style="font-size:9px;color:#A8BFDF;">-SEGEPLAN- · Sistema de Control de Mantenimiento</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:8px;color:#A8BFDF;">Generado: ${fecha}</div>
+      <div style="font-size:8px;color:#A8BFDF;">Por: ${usuario}</div>
+    </div>
+  </div>
+  <div style="background:#2D5FBF;padding:7px 18px;">
+    <div style="font-size:10px;font-weight:bold;color:#fff;">Expediente de Bien · Delegación ${delegacion}</div>
+  </div>
+  <div style="padding:12px 18px;border-bottom:1px solid #E2E6EF;">
+    <div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">📦 Datos Actuales del Bien</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+      <div style="background:#F4F6FA;border-radius:5px;padding:6px 10px;"><div style="font-size:7.5px;color:#8A93A8;">Código</div><div style="font-size:11px;font-weight:bold;color:#2D5FBF;font-family:monospace;">${b.codigo}</div></div>
+      <div style="background:#F4F6FA;border-radius:5px;padding:6px 10px;"><div style="font-size:7.5px;color:#8A93A8;">Tipo / Marca</div><div style="font-size:10px;font-weight:bold;color:#0F1A33;">${b.tipo||'—'} · ${b.marca||'—'}</div></div>
+      <div style="background:#F4F6FA;border-radius:5px;padding:6px 10px;"><div style="font-size:7.5px;color:#8A93A8;">Año / Modelo</div><div style="font-size:10px;font-weight:bold;color:#0F1A33;">${b.anio||'—'}${b.modelo?' · '+b.modelo:''}</div></div>
+      <div style="background:#F4F6FA;border-radius:5px;padding:6px 10px;"><div style="font-size:7.5px;color:#8A93A8;">Serie</div><div style="font-size:10px;font-weight:bold;color:#0F1A33;font-family:monospace;">${b.serie||'SN'}</div></div>
+      <div style="background:#F4F6FA;border-radius:5px;padding:6px 10px;"><div style="font-size:7.5px;color:#8A93A8;">Precio</div><div style="font-size:10px;font-weight:bold;color:#0F1A33;">Q ${(b.precio||0).toLocaleString()}</div></div>
+      <div style="background:#F4F6FA;border-radius:5px;padding:6px 10px;"><div style="font-size:7.5px;color:#8A93A8;">Renglón</div><div style="font-size:10px;font-weight:bold;color:#0F1A33;">${b.renglon||'—'}</div></div>
+      <div style="background:#F4F6FA;border-radius:5px;padding:6px 10px;"><div style="font-size:7.5px;color:#8A93A8;">Responsable</div><div style="font-size:10px;font-weight:bold;color:#0F1A33;">${b.responsable||'—'}</div></div>
+      <div style="background:#F4F6FA;border-radius:5px;padding:6px 10px;"><div style="font-size:7.5px;color:#8A93A8;">Registrado por</div><div style="font-size:10px;font-weight:bold;color:#0F1A33;">${b.creadoPor||'—'} · ${b.creadoEn?b.creadoEn.split('T')[0]:'—'}</div></div>
+      <div style="background:#F4F6FA;border-radius:5px;padding:6px 10px;"><div style="font-size:7.5px;color:#8A93A8;">Clasificación</div><span style="background:${clasifStyle.split(';')[0].replace('background:','')};color:${clasifStyle.split('color:')[1]};padding:2px 8px;border-radius:99px;font-size:9px;">${b.clasificacion||'—'}</span></div>
+      <div style="background:#F4F6FA;border-radius:5px;padding:6px 10px;"><div style="font-size:7.5px;color:#8A93A8;">Estado</div><span style="background:${estadoStyle.split(';')[0].replace('background:','')};color:${estadoStyle.split('color:')[1]};padding:2px 8px;border-radius:99px;font-size:9px;">${b.estado||'Activo'}</span></div>
+    </div>
+    ${b.desc?'<div style="margin-top:8px;padding:8px 10px;background:#F4F6FA;border-radius:5px;font-size:9px;color:#4A5568;">'+b.desc+'</div>':''}
+  </div>
+  <div style="padding:12px 18px;border-bottom:1px solid #E2E6EF;">
+    <div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">📅 Historial de Cambios</div>
+    ${logs.length===0?'<div style="font-size:9px;color:#8A93A8;padding:8px 0;">Sin registros en el historial.</div>':
+    '<div style="position:relative;padding-left:16px;">'+
+    '<div style="position:absolute;left:5px;top:6px;bottom:6px;width:2px;background:#E2E6EF;"></div>'+
+    logs.map(function(lg){
+      const dt=lg.created_at?new Date(lg.created_at):null;
+      const fechaLg=dt?dt.toLocaleDateString('es-GT'):'—';
+      const horaLg=dt?dt.toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'}):'—';
+      const dot=dotMap[lg.accion]||'#8A93A8';
+      const style=colorMap[lg.accion]||'background:#F4F6FA;color:#4A5568';
+      const label=labelMap[lg.accion]||lg.accion;
+      const bg=style.split(';')[0].replace('background:','');
+      const col=style.split('color:')[1];
+      return '<div style="position:relative;margin-bottom:8px;">'+
+        '<div style="position:absolute;left:-13px;top:3px;width:8px;height:8px;border-radius:50%;background:'+dot+';border:2px solid #fff;"></div>'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'+
+          '<div>'+
+            '<span style="background:'+bg+';color:'+col+';padding:2px 7px;border-radius:99px;font-size:8px;font-weight:bold;">'+label+'</span>'+
+            '<div style="font-size:9px;color:#0F1A33;margin-top:3px;">'+lg.detalle+'</div>'+
+            '<div style="font-size:8px;color:#8A93A8;margin-top:1px;">👤 '+lg.usuario+'</div>'+
+          '</div>'+
+          '<div style="font-size:8px;color:#8A93A8;white-space:nowrap;">'+fechaLg+' · '+horaLg+'</div>'+
+        '</div>'+
+      '</div>';
+    }).join('')+
+    '</div>'}
+  </div>
+  <div style="padding:12px 18px;border-bottom:1px solid #E2E6EF;">
+    <div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">🔧 Historial de Mantenimientos</div>
+    ${mantenimientos.length===0?'<div style="font-size:9px;color:#8A93A8;padding:8px 0;">Sin mantenimientos registrados.</div>':
+    '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:8.5px;">'+
+    '<thead><tr style="background:#1B3A6B;">'+
+    '<th style="padding:5px 8px;text-align:left;color:#fff;">Año</th>'+
+    '<th style="padding:5px 8px;text-align:left;color:#fff;">Mes</th>'+
+    '<th style="padding:5px 8px;text-align:left;color:#fff;">Tipo</th>'+
+    '<th style="padding:5px 8px;text-align:left;color:#fff;">Estado</th>'+
+    '<th style="padding:5px 8px;text-align:left;color:#fff;">Fecha Ejec.</th>'+
+    '<th style="padding:5px 8px;text-align:left;color:#fff;">Ejecutado por</th>'+
+    '<th style="padding:5px 8px;text-align:left;color:#fff;">Costo</th>'+
+    '<th style="padding:5px 8px;text-align:left;color:#fff;">Observaciones</th>'+
+    '</tr></thead><tbody>'+
+    mantenimientos.map(function(m,i){
+      const prog=db.programaciones.find(function(p){return p.id===m.programacion_id;})||{};
+      const ejecutado=m.estado==='ejecutado';
+      const bgRow=i%2===0?'#fff':'#F8F9FC';
+      return '<tr style="background:'+bgRow+';">'+
+        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+m.anio+'</td>'+
+        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(MESES[(m.mes||1)-1]||m.mes)+'</td>'+
+        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(prog.tipoMant||'—')+'</td>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #F0F2F8;"><span style="background:'+(ejecutado?'#E8F5EE':'#FEF3E2')+';color:'+(ejecutado?'#1A7A45':'#B7651A')+';padding:2px 6px;border-radius:99px;font-size:8px;">'+(ejecutado?'Ejecutado':'Pendiente')+'</span></td>'+
+        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(m.fecha_ejecucion?String(m.fecha_ejecucion).split('T')[0]:'—')+'</td>'+
+        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(m.ejecutado_por||'—')+'</td>'+
+        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(m.costo_ejecutado?'Q '+parseFloat(m.costo_ejecutado).toLocaleString():'—')+'</td>'+
+        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(m.observacion||'—')+'</td>'+
+      '</tr>';
+    }).join('')+
+    '</tbody></table></div>'+
+    '<div style="margin-top:8px;background:#F4F6FA;border-radius:5px;padding:7px 10px;display:flex;gap:16px;flex-wrap:wrap;">'+
+      '<div style="font-size:8.5px;color:#4A5568;">Ejecutados: <strong style="color:#1A7A45;">'+ejecutados.length+'</strong></div>'+
+      '<div style="font-size:8.5px;color:#4A5568;">Pendientes: <strong style="color:#B7651A;">'+pendientes.length+'</strong></div>'+
+      '<div style="font-size:8.5px;color:#4A5568;">Costo total ejecutado: <strong style="color:#1B3A6B;">Q '+costoTotal.toLocaleString()+'</strong></div>'+
+    '</div>'}
+  </div>
+  <div style="background:#F4F6FA;padding:7px 18px;display:flex;justify-content:space-between;align-items:center;">
+    <div style="font-size:7.5px;color:#8A93A8;">SCM SEGEPLAN · Sistema de Control de Mantenimiento</div>
+    <div style="font-size:7.5px;color:#8A93A8;">Página 1 de 1</div>
+  </div>
+</div>`;
+    const container=document.createElement('div');
+    container.style.cssText='position:fixed;left:-9999px;top:0;z-index:-1;background:#fff;';
+    container.innerHTML=htmlContent;
+    document.body.appendChild(container);
+    showToast('Generando PDF...');
+    html2canvas(container,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false})
+    .then(function(canvas){
+      document.body.removeChild(container);
+      const {jsPDF}=window.jspdf;
+      const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+      const imgData=canvas.toDataURL('image/jpeg',0.92);
+      const pageW=210;
+      const pageH=297;
+      const imgW=pageW-20;
+      const imgH=(canvas.height*imgW)/canvas.width;
+      let posY=10;
+      let heightLeft=imgH;
+      doc.addImage(imgData,'JPEG',10,posY,imgW,imgH);
+      heightLeft-=(pageH-posY-10);
+      while(heightLeft>0){
+        doc.addPage();
+        posY=-(imgH-heightLeft)+(pageH-10);
+        doc.addImage(imgData,'JPEG',10,posY,imgW,imgH);
+        heightLeft-=(pageH-20);
+      }
+      doc.save('expediente-'+b.codigo+'-'+new Date().toISOString().split('T')[0]+'.pdf');
+      registrarLog('exportar_pdf_expediente','Expediente PDF exportado: '+b.codigo,'datos');
+      showToast('PDF generado correctamente.');
+    })
+    .catch(function(err){
+      document.body.removeChild(container);
+      console.error(err);
+      showToast('Error al generar el PDF.');
+    });
+  });
+}
 function initReporteBienes(){
   const sel=document.getElementById('rptBienSel');
   if(!sel) return;
@@ -4536,6 +4842,18 @@ function initReporteBienes(){
 
 function renderReporteBienes(){
   const id=document.getElementById('rptBienSel').value;
+  const btnExp=document.getElementById('btnExportarExpediente');
+  if(btnExp){
+    if(id){
+      btnExp.disabled=false;
+      btnExp.style.opacity='1';
+      btnExp.style.cursor='pointer';
+    } else {
+      btnExp.disabled=true;
+      btnExp.style.opacity='.45';
+      btnExp.style.cursor='not-allowed';
+    }
+  }
   const cont=document.getElementById('rptBienContent');
   if(!id){cont.innerHTML='<div class="empty"><div class="empty-icon">📋</div><p>Seleccione un bien para ver su expediente completo.</p></div>';return;}
   const b=db.bienes.find(x=>x.id===id);
