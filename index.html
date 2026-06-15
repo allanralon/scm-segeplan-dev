@@ -4239,31 +4239,269 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
   })();
 }
 function exportarPDF(){
-  // Guardar título original
-  const titleOrig=document.title;
-  const year=document.getElementById('reportYear').value;
-  const deleg=currentUser.delegacion||'Global';
-  document.title=`Reporte-Mantenimiento-${deleg}-${year}`;
-  // Agregar hoja de estilos temporal para impresión
-  const style=document.createElement('style');
-  style.id='printStyle';
-  style.textContent=`
-    @media print{
-      body *{visibility:hidden;}
-      #secReport,#secReport *{visibility:visible;}
-      #secReport{position:absolute;top:0;left:0;width:100%;}
-      .bottom-nav,.topbar,.card:first-child{display:none!important;}
-      .card{box-shadow:none!important;border:1px solid #ddd!important;break-inside:avoid;margin-bottom:12px;}
-      .report-grid{grid-template-columns:1fr 1fr!important;}
-      .form-group,.search-bar{display:none!important;}
-      @page{margin:1.5cm;size:A4;}
-    }`;
-  document.head.appendChild(style);
-  window.print();
-  setTimeout(()=>{
-    document.getElementById('printStyle')?.remove();
-    document.title=titleOrig;
-  },1000);
+  const logoUrl='https://raw.githubusercontent.com/allanralon/scm-segeplan-dev/main/logo.png';
+  const year=document.getElementById('reportYear').value||new Date().getFullYear();
+  const fecha=new Date().toLocaleDateString('es-GT');
+  const usuario=currentUser?currentUser.nombre||currentUser.username:'—';
+  const delegacion=currentUser?currentUser.delegacion||'Todas':'Todas';
+  const isAdmin=currentUser&&currentUser.rol==='admin';
+  const filtroMes=document.getElementById('reportMes')?.value||'';
+  const filtroClasif=document.getElementById('reportClasif')?.value||'';
+  const filtroDepto=document.getElementById('reportDeleg')?.value||'';
+
+  // KPIs
+  const kpiProg=document.querySelector('.kpi-card-hero .kpi-val')?.textContent?.trim()||'—';
+  const kpiCards=document.querySelectorAll('#secReport .kpi-card');
+  const kpiExec=kpiCards[0]?.querySelector('.kpi-val,.stat-val')?.textContent?.trim()||'—';
+  const kpiEfic=kpiCards[1]?.querySelector('.kpi-val,.stat-val')?.textContent?.trim()||'—';
+  const kpiPend=kpiCards[2]?.querySelector('.kpi-val,.stat-val')?.textContent?.trim()||'—';
+
+  // Indicadores destacados
+  const indCards=document.querySelectorAll('#secReport .ind-card');
+  const ind1Val=indCards[0]?.querySelector('.ind-val')?.textContent?.trim()||'—';
+  const ind1Sub=indCards[0]?.querySelector('.ind-sub')?.textContent?.trim()||'';
+  const ind1Badge=indCards[0]?.querySelector('.ind-badge')?.textContent?.trim()||'';
+  const ind2Val=indCards[1]?.querySelector('.ind-val')?.textContent?.trim()||'—';
+  const ind2Sub=indCards[1]?.querySelector('.ind-sub')?.textContent?.trim()||'';
+  const ind2Badge=indCards[1]?.querySelector('.ind-badge')?.textContent?.trim()||'';
+  const ind3Val=indCards[2]?.querySelector('.ind-val')?.textContent?.trim()||'—';
+  const ind3Sub=indCards[2]?.querySelector('.ind-sub')?.textContent?.trim()||'';
+  const ind3Badge=indCards[2]?.querySelector('.ind-badge')?.textContent?.trim()||'';
+
+  // Detalle por Bien — leer de la tabla existente en el DOM
+  let detalleRows='';
+  document.querySelectorAll('#secReport table').forEach(function(tbl){
+    if(tbl.querySelector('th')?.textContent?.includes('Código') && tbl.querySelectorAll('th').length>=7){
+      tbl.querySelectorAll('tbody tr').forEach(function(tr,i){
+        const tds=tr.querySelectorAll('td');
+        if(tds.length>=7){
+          const eficTxt=tds[5]?.textContent?.trim()||'—';
+          const eficNum=parseInt(eficTxt)||0;
+          const eficColor=eficNum===100?'#1A7A45':eficNum>=50?'#B7651A':'#C0392B';
+          const eficBg=eficNum===100?'#E8F5EE':eficNum>=50?'#FEF3E2':'#FDECEA';
+          const clasifTxt=tds[2]?.textContent?.trim()||'—';
+          const clasifColor=clasifTxt.includes('Crítico')?'#C0392B':clasifTxt.includes('Sensible')?'#9A7D0A':'#B7651A';
+          const clasifBg=clasifTxt.includes('Crítico')?'#FDECEA':clasifTxt.includes('Sensible')?'#FFF8E1':'#FEF3E2';
+          const bgRow=i%2===0?'#fff':'#F8F9FC';
+          detalleRows+=
+            '<tr style="background:'+bgRow+';">'+
+            '<td style="padding:6px 8px;color:#2D5FBF;font-family:monospace;font-weight:600;font-size:9.5px;border-bottom:1px solid #F0F2F8;">'+tds[0]?.textContent?.trim()+'</td>'+
+            '<td style="padding:6px 8px;color:#0F1A33;font-size:9.5px;border-bottom:1px solid #F0F2F8;">'+tds[1]?.textContent?.trim()+'</td>'+
+            '<td style="padding:6px 8px;border-bottom:1px solid #F0F2F8;"><span style="background:'+clasifBg+';color:'+clasifColor+';padding:2px 6px;border-radius:99px;font-size:8.5px;">'+clasifTxt+'</span></td>'+
+            '<td style="padding:6px 8px;text-align:center;color:#0F1A33;font-size:9.5px;border-bottom:1px solid #F0F2F8;">'+tds[3]?.textContent?.trim()+'</td>'+
+            '<td style="padding:6px 8px;text-align:center;color:#0F1A33;font-size:9.5px;border-bottom:1px solid #F0F2F8;">'+tds[4]?.textContent?.trim()+'</td>'+
+            '<td style="padding:6px 8px;text-align:center;border-bottom:1px solid #F0F2F8;"><span style="background:'+eficBg+';color:'+eficColor+';padding:2px 6px;border-radius:99px;font-size:8.5px;font-weight:600;">'+eficTxt+'</span></td>'+
+            '<td style="padding:6px 8px;text-align:right;color:#0F1A33;font-size:9.5px;border-bottom:1px solid #F0F2F8;">'+tds[6]?.textContent?.trim()+'</td>'+
+            '<td style="padding:6px 8px;text-align:right;color:#1A7A45;font-weight:500;font-size:9.5px;border-bottom:1px solid #F0F2F8;">'+tds[7]?.textContent?.trim()+'</td>'+
+            '</tr>';
+        }
+      });
+    }
+  });
+
+  // Alertas de ciclo de vida
+  let alertasRows='';
+  let hasAlertas=false;
+  document.querySelectorAll('#secReport .card').forEach(function(c){
+    if(c.textContent.includes('Alertas de ciclo de vida')){
+      hasAlertas=true;
+      c.querySelectorAll('tbody tr').forEach(function(tr){
+        const tds=tr.querySelectorAll('td');
+        if(tds.length>=5&&!tr.textContent.includes('Sin alertas')){
+          alertasRows+=
+            '<tr>'+
+            '<td style="padding:5px 8px;color:#2D5FBF;font-family:monospace;font-size:9px;border-bottom:1px solid #F5EDED;">'+tds[0]?.textContent?.trim()+'</td>'+
+            '<td style="padding:5px 8px;font-size:9px;color:#0F1A33;border-bottom:1px solid #F5EDED;">'+tds[1]?.textContent?.trim()+'</td>'+
+            '<td style="padding:5px 8px;text-align:right;font-size:9px;color:#0F1A33;border-bottom:1px solid #F5EDED;">'+tds[2]?.textContent?.trim()+'</td>'+
+            '<td style="padding:5px 8px;text-align:right;font-size:9px;font-weight:600;color:#C0392B;border-bottom:1px solid #F5EDED;">'+tds[3]?.textContent?.trim()+'</td>'+
+            '<td style="padding:5px 8px;text-align:center;font-size:9px;border-bottom:1px solid #F5EDED;">'+tds[4]?.textContent?.trim()+'</td>'+
+            '</tr>';
+        }
+      });
+    }
+  });
+
+  // Comparativa por delegación
+  let delegRows='';
+  if(isAdmin){
+    document.querySelectorAll('#secReport .deleg-bar-row').forEach(function(row){
+      const nombre=row.querySelector('div:first-child')?.textContent?.trim()||'—';
+      const badges=row.querySelectorAll('.badge');
+      const pejec=badges[0]?.textContent?.trim()||'—';
+      const efic=badges[1]?.textContent?.trim()||'—';
+      const costo=row.querySelector('.deleg-cost')?.textContent?.trim()||'—';
+      delegRows+=
+        '<tr>'+
+        '<td style="padding:6px 8px;font-size:9.5px;font-weight:500;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+nombre+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;border-bottom:1px solid #F0F2F8;"><span style="background:#FEF3E2;color:#B7651A;padding:2px 7px;border-radius:99px;font-size:8.5px;font-weight:600;">'+pejec+'</span></td>'+
+        '<td style="padding:6px 8px;text-align:center;border-bottom:1px solid #F0F2F8;"><span style="background:#E8F5EE;color:#1A7A45;padding:2px 7px;border-radius:99px;font-size:8.5px;font-weight:600;">'+efic+'</span></td>'+
+        '<td style="padding:6px 8px;text-align:right;color:#1A7A45;font-weight:500;font-size:9.5px;border-bottom:1px solid #F0F2F8;">'+costo+'</td>'+
+        '</tr>';
+    });
+  }
+
+  const subtituloFiltro='Delegación: '+(filtroDepto||'Todas')+
+    (filtroClasif?' · '+filtroClasif:'')+
+    (filtroMes?' · Mes '+filtroMes:'');
+
+  const htmlContent=`
+<div style="font-family:Arial,sans-serif;width:190mm;margin:0 auto;background:#fff;">
+
+  <div style="background:#1B3A6B;padding:14px 18px;display:flex;align-items:center;gap:12px;">
+    <div style="background:#fff;border-radius:8px;padding:4px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <img src="${logoUrl}" width="30" height="30" style="object-fit:contain;" crossorigin="anonymous"/>
+    </div>
+    <div style="flex:1;">
+      <div style="font-size:11px;font-weight:bold;color:#fff;line-height:1.3;">Secretaría de Planificación y Programación de la Presidencia</div>
+      <div style="font-size:9px;color:#A8BFDF;">-SEGEPLAN- · Sistema de Control de Mantenimiento</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0;">
+      <div style="font-size:8px;color:#A8BFDF;">Generado: ${fecha}</div>
+      <div style="font-size:8px;color:#A8BFDF;">Por: ${usuario}</div>
+    </div>
+  </div>
+
+  <div style="background:#2D5FBF;padding:7px 18px;display:flex;justify-content:space-between;align-items:center;">
+    <div style="font-size:10px;font-weight:bold;color:#fff;">Reporte de Eficiencia · ${year}</div>
+    <div style="font-size:9px;color:#A8BFDF;">${subtituloFiltro}</div>
+  </div>
+
+  <div style="padding:12px 18px 16px;">
+
+    <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div style="background:linear-gradient(135deg,#1B3A6B,#2D5FBF);border-radius:8px;padding:12px;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:-8px;right:-8px;width:50px;height:50px;background:rgba(255,255,255,.08);border-radius:50%;"></div>
+        <div style="font-size:8px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Programados</div>
+        <div style="font-size:24px;font-weight:bold;color:#fff;line-height:1;">${kpiProg}</div>
+        <div style="font-size:8px;color:rgba(255,255,255,.5);margin-top:3px;">mantenimientos ${year}</div>
+      </div>
+      <div style="background:#F4F6FA;border-radius:8px;padding:12px;border:1px solid #E2E6EF;">
+        <div style="font-size:8px;color:#8A93A8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Ejecutados</div>
+        <div style="font-size:22px;font-weight:bold;color:#1A7A45;line-height:1;">${kpiExec}</div>
+      </div>
+      <div style="background:#F4F6FA;border-radius:8px;padding:12px;border:1px solid #E2E6EF;">
+        <div style="font-size:8px;color:#8A93A8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Eficiencia</div>
+        <div style="font-size:22px;font-weight:bold;color:#534AB7;line-height:1;">${kpiEfic}</div>
+      </div>
+      <div style="background:#F4F6FA;border-radius:8px;padding:12px;border:1px solid #E2E6EF;">
+        <div style="font-size:8px;color:#8A93A8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Pendientes</div>
+        <div style="font-size:22px;font-weight:bold;color:#B7651A;line-height:1;">${kpiPend}</div>
+      </div>
+    </div>
+
+    <div style="font-size:8px;font-weight:bold;color:#8A93A8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Indicadores Destacados</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+      <div style="background:#F4F6FA;border-radius:8px;padding:10px;border:1px solid #E2E6EF;">
+        <div style="font-size:8px;color:#8A93A8;text-transform:uppercase;margin-bottom:4px;">Bien con mayor actividad</div>
+        <div style="font-size:12px;font-weight:bold;color:#2D5FBF;font-family:monospace;">${ind1Val}</div>
+        <div style="font-size:9px;color:#4A5568;margin-bottom:5px;">${ind1Sub}</div>
+        <span style="background:#EBF0FB;color:#2D5FBF;padding:2px 8px;border-radius:99px;font-size:8px;font-weight:500;">${ind1Badge}</span>
+      </div>
+      <div style="background:#F4F6FA;border-radius:8px;padding:10px;border:1px solid #E2E6EF;">
+        <div style="font-size:8px;color:#8A93A8;text-transform:uppercase;margin-bottom:4px;">Mes con mayor ejecución</div>
+        <div style="font-size:12px;font-weight:bold;color:#1A7A45;">${ind2Val}</div>
+        <div style="font-size:9px;color:#4A5568;margin-bottom:5px;">${ind2Sub}</div>
+        <span style="background:#E8F5EE;color:#1A7A45;padding:2px 8px;border-radius:99px;font-size:8px;font-weight:500;">${ind2Badge}</span>
+      </div>
+      <div style="background:#F4F6FA;border-radius:8px;padding:10px;border:1px solid #E2E6EF;">
+        <div style="font-size:8px;color:#8A93A8;text-transform:uppercase;margin-bottom:4px;">Mantenimiento más frecuente</div>
+        <div style="font-size:12px;font-weight:bold;color:#534AB7;">${ind3Val}</div>
+        <div style="font-size:9px;color:#4A5568;margin-bottom:5px;">${ind3Sub}</div>
+        <span style="background:#EEEDFE;color:#534AB7;padding:2px 8px;border-radius:99px;font-size:8px;font-weight:500;">${ind3Badge}</span>
+      </div>
+    </div>
+
+    <div style="font-size:9px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">📋 Detalle por Bien</div>
+    <table style="width:100%;border-collapse:collapse;font-size:9.5px;margin-bottom:12px;">
+      <thead>
+        <tr style="background:#1B3A6B;">
+          <th style="padding:6px 8px;text-align:left;color:#fff;font-weight:500;">Código</th>
+          <th style="padding:6px 8px;text-align:left;color:#fff;font-weight:500;">Tipo</th>
+          <th style="padding:6px 8px;text-align:left;color:#fff;font-weight:500;">Clasificación</th>
+          <th style="padding:6px 8px;text-align:center;color:#fff;font-weight:500;">Prog.</th>
+          <th style="padding:6px 8px;text-align:center;color:#fff;font-weight:500;">Ejec.</th>
+          <th style="padding:6px 8px;text-align:center;color:#fff;font-weight:500;">Efic.</th>
+          <th style="padding:6px 8px;text-align:right;color:#fff;font-weight:500;">Costo Prog.</th>
+          <th style="padding:6px 8px;text-align:right;color:#fff;font-weight:500;">Costo Ejec.</th>
+        </tr>
+      </thead>
+      <tbody>${detalleRows||'<tr><td colspan="8" style="padding:12px;text-align:center;color:#8A93A8;font-size:9px;">Sin datos para este período</td></tr>'}</tbody>
+    </table>
+
+    ${hasAlertas&&alertasRows?`
+    <div style="font-size:9px;font-weight:bold;color:#C0392B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">⚠️ Alertas de Ciclo de Vida</div>
+    <table style="width:100%;border-collapse:collapse;font-size:9px;margin-bottom:12px;">
+      <thead>
+        <tr style="background:#A32D2D;">
+          <th style="padding:6px 8px;text-align:left;color:#fff;font-weight:500;">Código</th>
+          <th style="padding:6px 8px;text-align:left;color:#fff;font-weight:500;">Bien</th>
+          <th style="padding:6px 8px;text-align:right;color:#fff;font-weight:500;">Valor</th>
+          <th style="padding:6px 8px;text-align:right;color:#fff;font-weight:500;">Invertido</th>
+          <th style="padding:6px 8px;text-align:center;color:#fff;font-weight:500;">Relación</th>
+        </tr>
+      </thead>
+      <tbody>${alertasRows}</tbody>
+    </table>`:''}
+
+    ${isAdmin&&delegRows?`
+    <div style="font-size:9px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">🏛️ Comparativa por Delegación</div>
+    <table style="width:100%;border-collapse:collapse;font-size:9.5px;margin-bottom:12px;">
+      <thead>
+        <tr style="background:#1B3A6B;">
+          <th style="padding:6px 8px;text-align:left;color:#fff;font-weight:500;">Delegación</th>
+          <th style="padding:6px 8px;text-align:center;color:#fff;font-weight:500;">% Ejec. Presup.</th>
+          <th style="padding:6px 8px;text-align:center;color:#fff;font-weight:500;">Eficiencia</th>
+          <th style="padding:6px 8px;text-align:right;color:#fff;font-weight:500;">Costo Ejecutado</th>
+        </tr>
+      </thead>
+      <tbody>${delegRows}</tbody>
+    </table>`:''}
+
+  </div>
+
+  <div style="background:#F4F6FA;border-top:1px solid #E2E6EF;padding:8px 18px;display:flex;justify-content:space-between;align-items:center;">
+    <div style="font-size:8px;color:#8A93A8;">SCM SEGEPLAN · Sistema de Control de Mantenimiento</div>
+    <div style="font-size:8px;color:#8A93A8;">Generado el ${fecha}</div>
+  </div>
+
+</div>`;
+
+  const container=document.createElement('div');
+  container.style.cssText='position:fixed;left:-9999px;top:0;z-index:-1;background:#fff;';
+  container.innerHTML=htmlContent;
+  document.body.appendChild(container);
+  showToast('Generando PDF...');
+
+  html2canvas(container,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false})
+  .then(function(canvas){
+    document.body.removeChild(container);
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const imgData=canvas.toDataURL('image/jpeg',0.92);
+    const pageW=210;
+    const pageH=297;
+    const imgW=pageW-20;
+    const imgH=(canvas.height*imgW)/canvas.width;
+    let posY=10;
+    let heightLeft=imgH;
+    doc.addImage(imgData,'JPEG',10,posY,imgW,imgH);
+    heightLeft-=(pageH-posY-10);
+    while(heightLeft>0){
+      doc.addPage();
+      posY=-(imgH-heightLeft)+(pageH-10);
+      doc.addImage(imgData,'JPEG',10,posY,imgW,imgH);
+      heightLeft-=(pageH-20);
+    }
+    const deleg=currentUser?currentUser.delegacion||'Global':'Global';
+    doc.save('Reporte-Eficiencia-'+deleg+'-'+year+'.pdf');
+    registrarLog('exportar_pdf_reporte','Reporte de eficiencia '+year+' exportado','datos');
+    showToast('PDF generado correctamente.');
+  })
+  .catch(function(err){
+    document.body.removeChild(container);
+    console.error(err);
+    showToast('Error al generar el PDF.');
+  });
 }
 
 // ============================================================
