@@ -4689,8 +4689,8 @@ function exportarPDFExpediente(){
       return prog&&prog.bienId===id;
     }):[];
     const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-    const ejecutados=mantenimientos.filter(function(m){return m.estado==='ejecutado';});
-    const pendientes=mantenimientos.filter(function(m){return m.estado!=='ejecutado';});
+    const ejecutados=mantenimientos.filter(function(m){return (m.estado||'').toLowerCase()==='ejecutado';});
+    const pendientes=mantenimientos.filter(function(m){return (m.estado||'').toLowerCase()!=='ejecutado';});
     const costoTotal=ejecutados.reduce(function(acc,m){return acc+(parseFloat(m.costo_ejecutado)||0);},0);
     const htmlContent=`
 <div style="font-family:Arial,sans-serif;width:190mm;margin:0 auto;padding:0;background:#fff;">
@@ -4779,10 +4779,10 @@ function exportarPDFExpediente(){
           for(var mes=1;mes<=12;mes++){
             const mant=mantenimientos.find(function(m){
               const prog=db.programaciones.find(function(p){return p.id===m.programacion_id;})||{};
-              return m.anio===anio && m.mes===mes && (prog.tipoMant||'—')===tipo;
+              return m.anio===anio && (m.mes_num===mes||m.mes_num===mes) && (prog.tipoMant||'—')===tipo;
             });
             if(mant){
-              const ejecutado=mant.estado==='ejecutado';
+              const ejecutado=(mant.estado||'').toLowerCase()==='ejecutado';
               const costo=mant.costo_ejecutado?'Q'+Math.round(parseFloat(mant.costo_ejecutado)):'';
               const bg=ejecutado?'#1A7A45':'#B7651A';
               const icon=ejecutado?'✓':'⏳';
