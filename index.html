@@ -3961,8 +3961,12 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
       var costoAcum=0;
       if(db.seguimientos){
         db.seguimientos.forEach(function(s){
-          var pg=db.programaciones.find(function(p){return p.id===s.programacion_id;});
-          if(pg&&pg.bienId===b.id) costoAcum+=(parseFloat(s.costo_ejecutado)||0);
+          var esMismoBien=(s.bien_id===b.id);
+          if(!esMismoBien){
+            var pg=db.programaciones.find(function(p){return p.id===s.programacion_id;});
+            esMismoBien=pg&&pg.bienId===b.id;
+          }
+          if(esMismoBien) costoAcum+=(parseFloat(s.costo_ejecutado)||0);
         });
       }
       var pct=Math.round(costoAcum/b.precio*100);
