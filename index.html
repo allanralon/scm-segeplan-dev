@@ -2594,10 +2594,35 @@ function _renderDashUI(y,bienes,dashMap,dashMapCur,dashCacheCur){
   });
   var pct=totalProg>0?Math.round((totalExec/totalProg)*100):0;
   document.getElementById('dashStats').innerHTML=
-    '<div class="kpi-card kpi-blue"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div><div class="kpi-val">'+bienes.length+'</div><div class="kpi-lbl">Bienes Registrados</div></div>'+
-    '<div class="kpi-card kpi-green"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div><div class="kpi-val">'+totalProg+'</div><div class="kpi-lbl">Programados</div></div>'+
-    '<div class="kpi-card kpi-orange"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></div><div class="kpi-val">'+totalExec+'</div><div class="kpi-lbl">Ejecutados</div></div>'+
-    '<div class="kpi-card '+(pct>=80?'kpi-violet':pct>=50?'kpi-orange':'kpi-blue')+'"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div><div class="kpi-val">'+pct+'%</div><div class="kpi-lbl">Eficiencia Global</div></div>';
+    '<div class="kpi-card-hero">'+
+      '<div class="kpi-val">'+bienes.length+'</div>'+
+      '<div class="kpi-lbl">Bienes Registrados</div>'+
+      '<div class="kpi-sub">inventario activo '+y+'</div>'+
+    '</div>'+
+    '<div class="kpi-card kpi-green" style="position:relative;overflow:hidden;">'+
+      '<div class="kpi-corner-icon" style="background:#E8F5EE;">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1A7A45" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>'+
+      '</div>'+
+      '<div class="kpi-val">'+totalProg+'</div>'+
+      '<div class="kpi-lbl">Programados</div>'+
+      '<div class="kpi-sub">mantenimientos '+y+'</div>'+
+    '</div>'+
+    '<div class="kpi-card kpi-orange" style="position:relative;overflow:hidden;">'+
+      '<div class="kpi-corner-icon" style="background:#FEF3E2;">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#B7651A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>'+
+      '</div>'+
+      '<div class="kpi-val">'+totalExec+'</div>'+
+      '<div class="kpi-lbl">Ejecutados</div>'+
+      '<div class="kpi-sub">completados en el período</div>'+
+    '</div>'+
+    '<div class="kpi-card '+(pct>=80?'kpi-violet':pct>=50?'kpi-orange':'kpi-blue')+'" style="position:relative;overflow:hidden;">'+
+      '<div class="kpi-corner-icon" style="background:#EEEDFE;">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#534AB7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>'+
+      '</div>'+
+      '<div class="kpi-val">'+pct+'%</div>'+
+      '<div class="kpi-lbl">Eficiencia Global</div>'+
+      '<div class="kpi-sub">del plan ejecutado</div>'+
+    '</div>';
   _dashDrFn=function(pid,m){return dashMap[pid+'_'+m]||{};};
   _renderDashProgress(y);
   _pendDrFn=function(pid,m){return dashMapCur[pid+'_'+m]||{};};
