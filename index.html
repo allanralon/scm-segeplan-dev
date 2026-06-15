@@ -4757,38 +4757,58 @@ function exportarPDFExpediente(){
   <div style="padding:12px 18px;border-bottom:1px solid #E2E6EF;">
     <div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">🔧 Historial de Mantenimientos</div>
     ${mantenimientos.length===0?'<div style="font-size:9px;color:#8A93A8;padding:8px 0;">Sin mantenimientos registrados.</div>':
-    '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:8.5px;">'+
-    '<thead><tr style="background:#1B3A6B;">'+
-    '<th style="padding:5px 8px;text-align:left;color:#fff;">Año</th>'+
-    '<th style="padding:5px 8px;text-align:left;color:#fff;">Mes</th>'+
-    '<th style="padding:5px 8px;text-align:left;color:#fff;">Tipo</th>'+
-    '<th style="padding:5px 8px;text-align:left;color:#fff;">Estado</th>'+
-    '<th style="padding:5px 8px;text-align:left;color:#fff;">Fecha Ejec.</th>'+
-    '<th style="padding:5px 8px;text-align:left;color:#fff;">Ejecutado por</th>'+
-    '<th style="padding:5px 8px;text-align:left;color:#fff;">Costo</th>'+
-    '<th style="padding:5px 8px;text-align:left;color:#fff;">Observaciones</th>'+
-    '</tr></thead><tbody>'+
-    mantenimientos.map(function(m,i){
-      const prog=db.programaciones.find(function(p){return p.id===m.programacion_id;})||{};
-      const ejecutado=m.estado==='ejecutado';
-      const bgRow=i%2===0?'#fff':'#F8F9FC';
-      return '<tr style="background:'+bgRow+';">'+
-        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+m.anio+'</td>'+
-        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(MESES[(m.mes||1)-1]||m.mes)+'</td>'+
-        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(prog.tipoMant||'—')+'</td>'+
-        '<td style="padding:5px 8px;border-bottom:1px solid #F0F2F8;"><span style="background:'+(ejecutado?'#E8F5EE':'#FEF3E2')+';color:'+(ejecutado?'#1A7A45':'#B7651A')+';padding:2px 6px;border-radius:99px;font-size:8px;">'+(ejecutado?'Ejecutado':'Pendiente')+'</span></td>'+
-        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(m.fecha_ejecucion?String(m.fecha_ejecucion).split('T')[0]:'—')+'</td>'+
-        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(m.ejecutado_por||'—')+'</td>'+
-        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(m.costo_ejecutado?'Q '+parseFloat(m.costo_ejecutado).toLocaleString():'—')+'</td>'+
-        '<td style="padding:5px 8px;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+(m.observacion||'—')+'</td>'+
-      '</tr>';
-    }).join('')+
-    '</tbody></table></div>'+
-    '<div style="margin-top:8px;background:#F4F6FA;border-radius:5px;padding:7px 10px;display:flex;gap:16px;flex-wrap:wrap;">'+
-      '<div style="font-size:8.5px;color:#4A5568;">Ejecutados: <strong style="color:#1A7A45;">'+ejecutados.length+'</strong></div>'+
-      '<div style="font-size:8.5px;color:#4A5568;">Pendientes: <strong style="color:#B7651A;">'+pendientes.length+'</strong></div>'+
-      '<div style="font-size:8.5px;color:#4A5568;">Costo total ejecutado: <strong style="color:#1B3A6B;">Q '+costoTotal.toLocaleString()+'</strong></div>'+
-    '</div>'}
+    (function(){
+      const anios=[...new Set(mantenimientos.map(function(m){return m.anio;}))].sort();
+      const tipos=[...new Set(mantenimientos.map(function(m){
+        const prog=db.programaciones.find(function(p){return p.id===m.programacion_id;})||{};
+        return prog.tipoMant||'—';
+      }))];
+      const MESES_CORTOS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      let ganttHtml='';
+      anios.forEach(function(anio){
+        ganttHtml+='<div style="font-size:9px;font-weight:bold;color:#1B3A6B;margin-bottom:6px;margin-top:'+(ganttHtml?'12px':'0')+';">'+anio+'</div>';
+        ganttHtml+='<div style="display:grid;grid-template-columns:68px repeat(12,1fr);gap:2px;margin-bottom:3px;">';
+        ganttHtml+='<div></div>';
+        MESES_CORTOS.forEach(function(mes){
+          ganttHtml+='<div style="font-size:7px;color:#8A93A8;text-align:center;">'+mes+'</div>';
+        });
+        ganttHtml+='</div>';
+        tipos.forEach(function(tipo){
+          ganttHtml+='<div style="display:grid;grid-template-columns:68px repeat(12,1fr);gap:2px;margin-bottom:3px;">';
+          ganttHtml+='<div style="font-size:8px;color:#0F1A33;font-weight:500;padding-top:3px;padding-right:4px;white-space:nowrap;overflow:hidden;">'+tipo+'</div>';
+          for(var mes=1;mes<=12;mes++){
+            const mant=mantenimientos.find(function(m){
+              const prog=db.programaciones.find(function(p){return p.id===m.programacion_id;})||{};
+              return m.anio===anio && m.mes===mes && (prog.tipoMant||'—')===tipo;
+            });
+            if(mant){
+              const ejecutado=mant.estado==='ejecutado';
+              const costo=mant.costo_ejecutado?'Q'+Math.round(parseFloat(mant.costo_ejecutado)):'';
+              const bg=ejecutado?'#1A7A45':'#B7651A';
+              const icon=ejecutado?'✓':'⏳';
+              ganttHtml+='<div style="background:'+bg+';border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 1px;min-height:22px;">';
+              ganttHtml+='<div style="font-size:8px;color:#fff;line-height:1;">'+icon+'</div>';
+              if(costo) ganttHtml+='<div style="font-size:6.5px;color:#fff;line-height:1;margin-top:1px;">'+costo+'</div>';
+              ganttHtml+='</div>';
+            } else {
+              ganttHtml+='<div style="background:#F0F2F8;border-radius:3px;min-height:22px;"></div>';
+            }
+          }
+          ganttHtml+='</div>';
+        });
+      });
+      ganttHtml+='<div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">';
+      ganttHtml+='<div style="display:flex;align-items:center;gap:4px;font-size:8px;color:#4A5568;"><div style="width:10px;height:10px;background:#1A7A45;border-radius:2px;"></div>Ejecutado</div>';
+      ganttHtml+='<div style="display:flex;align-items:center;gap:4px;font-size:8px;color:#4A5568;"><div style="width:10px;height:10px;background:#B7651A;border-radius:2px;"></div>Pendiente</div>';
+      ganttHtml+='<div style="display:flex;align-items:center;gap:4px;font-size:8px;color:#4A5568;"><div style="width:10px;height:10px;background:#F0F2F8;border-radius:2px;border:1px solid #E2E6EF;"></div>Sin programar</div>';
+      ganttHtml+='</div>';
+      ganttHtml+='<div style="margin-top:8px;background:#F4F6FA;border-radius:5px;padding:7px 10px;display:flex;gap:16px;flex-wrap:wrap;">';
+      ganttHtml+='<div style="font-size:8.5px;color:#4A5568;">Ejecutados: <strong style="color:#1A7A45;">'+ejecutados.length+'</strong></div>';
+      ganttHtml+='<div style="font-size:8.5px;color:#4A5568;">Pendientes: <strong style="color:#B7651A;">'+pendientes.length+'</strong></div>';
+      ganttHtml+='<div style="font-size:8.5px;color:#4A5568;">Costo total ejecutado: <strong style="color:#1B3A6B;">Q '+costoTotal.toLocaleString()+'</strong></div>';
+      ganttHtml+='</div>';
+      return ganttHtml;
+    })()}
   </div>
   <div style="background:#F4F6FA;padding:7px 18px;display:flex;justify-content:space-between;align-items:center;">
     <div style="font-size:7.5px;color:#8A93A8;">SCM SEGEPLAN · Sistema de Control de Mantenimiento</div>
