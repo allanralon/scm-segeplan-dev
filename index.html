@@ -3794,8 +3794,7 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
 
   // ── Delegation data ──
   var delegsUniq=[...new Set(bienes.map(function(b){return b.delegacion||'Sin delegaci\u00f3n';}))];
-  window._rptDelegData=delegsUniq.map(function(d){
-  var delegData=window._rptDelegData;
+  var delegData=delegsUniq.map(function(d){
     var bienesDel=bienes.filter(function(b){return (b.delegacion||'Sin delegaci\u00f3n')===d;});
     var dp=0,de=0,dcp=0,dce=0;
     bienesDel.forEach(function(b){
@@ -3814,6 +3813,7 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
     var pcosto=dcp>0?Math.round((dce/dcp)*100):0;
     return {d:d,n:bienesDel.length,dp:dp,de:de,dcp:dcp,dce:dce,pejec:pejec,pcosto:pcosto};
   });
+  window._rptDelegData=delegData;
 
   // ── Build HTML ──
   var h='';
