@@ -3814,6 +3814,8 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
     return {d:d,n:bienesDel.length,dp:dp,de:de,dcp:dcp,dce:dce,pejec:pejec,pcosto:pcosto};
   });
   window._rptDelegData=delegData;
+  window._rptEfic={pct:gp,exec:totalExec,pend:(totalProg-totalExec),total:totalProg,avance:gp};
+  window._rptPresup={presup:'Q '+totalCosto.toLocaleString(),exec:'Q '+totalEjec.toLocaleString(),saldo:'Q '+(totalCosto-totalEjec).toLocaleString(),bar:costoPct};
 
   // ── Build HTML ──
   var h='';
@@ -4352,35 +4354,24 @@ function exportarPDF(){
     const mesCanvas=document.getElementById('_rptMesCanvas');
     if(mesCanvas) mesImgSrc=mesCanvas.toDataURL('image/png');
   }catch(e){}
-  // Eficiencia Global y Presupuesto son HTML puro — leer valores del DOM
-  try{
-    let eficCardEl=null;
-    document.querySelectorAll('#secReport .card').forEach(function(c){
-      if(c.textContent.includes('Eficiencia Global')) eficCardEl=c;
+  // Leer Eficiencia y Presupuesto desde variables globales expuestas por _renderReportUI
+  if(window._rptEfic){
+    eficImgSrc=JSON.stringify({
+      pct:window._rptEfic.pct+'%',
+      exec:window._rptEfic.exec,
+      pend:window._rptEfic.pend,
+      total:window._rptEfic.total,
+      avance:window._rptEfic.avance+'%'
     });
-    if(eficCardEl){
-      const pct=eficCardEl.querySelector('[style*="color:var(--success)"]')?.textContent?.trim()||'—';
-      const exec=eficCardEl.querySelectorAll('strong')[0]?.textContent?.trim()||'—';
-      const pend=eficCardEl.querySelectorAll('strong')[1]?.textContent?.trim()||'—';
-      const total=eficCardEl.querySelectorAll('strong')[2]?.textContent?.trim()||'—';
-      const avance=eficCardEl.querySelector('[style*="background:var(--success)"]')?.style?.width||'0%';
-      eficImgSrc=JSON.stringify({pct:pct,exec:exec,pend:pend,total:total,avance:avance});
-    }
-  }catch(e){}
-  try{
-    let presupCardEl=null;
-    document.querySelectorAll('#secReport .card').forEach(function(c){
-      if(c.textContent.includes('Presupuesto vs Ejecu\u00f3n')||c.textContent.includes('Presupuesto vs Ejecuci\u00f3n')) presupCardEl=c;
+  }
+  if(window._rptPresup){
+    presupImgSrc=JSON.stringify({
+      presup:window._rptPresup.presup,
+      exec:window._rptPresup.exec,
+      saldo:window._rptPresup.saldo,
+      bar:window._rptPresup.bar+'%'
     });
-    if(presupCardEl){
-      const vals=presupCardEl.querySelectorAll('[style*="font-weight:600"],[style*="font-weight: 600"]');
-      const presup=vals[0]?.textContent?.trim()||'—';
-      const exec=vals[1]?.textContent?.trim()||'—';
-      const saldo=vals[2]?.textContent?.trim()||'—';
-      const barWidth=presupCardEl.querySelector('[style*="background:#2D5FBF"],[style*="background:var(--primary)"]')?.style?.width||'0%';
-      presupImgSrc=JSON.stringify({presup:presup,exec:exec,saldo:saldo,bar:barWidth});
-    }
-  }catch(e){}
+  }
 
   const eficData=eficImgSrc?JSON.parse(eficImgSrc):null;
   const presupData=presupImgSrc?JSON.parse(presupImgSrc):null;
