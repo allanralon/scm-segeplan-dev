@@ -4383,9 +4383,22 @@ function exportarPDF(){
         '<div style="background:#F4F6FA;border-radius:8px;padding:10px;border:1px solid #E2E6EF;">'+
           '<div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">Eficiencia Global</div>'+
           '<div style="display:flex;align-items:center;gap:12px;">'+
-            '<div style="width:60px;height:60px;flex-shrink:0;background:conic-gradient(#1A7A45 '+eficData.avance+', #E2E6EF 0);border-radius:50%;display:flex;align-items:center;justify-content:center;">'+
-              '<div style="width:44px;height:44px;background:#F4F6FA;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;color:#1A7A45;">'+eficData.pct+'</div>'+
-            '</div>'+
+            (function(){
+              var pctNum=parseInt(eficData.avance)||0;
+              var r=26;var circ=2*Math.PI*r;
+              var dash=circ*(pctNum/100);
+              var donutColor=pctNum>=80?'#1A7A45':pctNum>=50?'#B7651A':'#C0392B';
+              return '<div style="position:relative;width:70px;height:70px;flex-shrink:0;">'+
+                '<svg viewBox="0 0 70 70" width="70" height="70">'+
+                  '<circle cx="35" cy="35" r="'+r+'" fill="none" stroke="#E2E6EF" stroke-width="9"/>'+
+                  '<circle cx="35" cy="35" r="'+r+'" fill="none" stroke="'+donutColor+'" stroke-width="9"'+
+                  ' stroke-dasharray="'+dash.toFixed(1)+' '+circ.toFixed(1)+'"'+
+                  ' stroke-dashoffset="'+(circ*0.25).toFixed(1)+'"'+
+                  ' stroke-linecap="round"/>'+
+                '</svg>'+
+                '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;color:'+donutColor+';">'+eficData.pct+'</div>'+
+              '</div>';
+            })()+
             '<div>'+
               '<div style="font-size:9px;color:#4A5568;margin-bottom:3px;">Ejecutados: <strong style="color:#1A7A45;">'+eficData.exec+'</strong></div>'+
               '<div style="font-size:9px;color:#4A5568;margin-bottom:3px;">Pendientes: <strong style="color:#B7651A;">'+eficData.pend+'</strong></div>'+
