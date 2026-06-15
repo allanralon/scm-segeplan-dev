@@ -272,6 +272,36 @@ select:focus{outline:none;border-color:var(--accent);box-shadow:var(--focus-ring
 .kpi-orange .kpi-icon{background:rgba(212,135,10,.1);color:#d4870a;}
 .kpi-violet{border-left-color:#5c3a92;}
 .kpi-violet .kpi-icon{background:rgba(92,58,146,.1);color:#5c3a92;}
+.kpi-card-hero{background:linear-gradient(135deg,#1B3A6B,#2D5FBF);border-radius:var(--radius);padding:18px 20px;position:relative;overflow:hidden;border:none;box-shadow:0 4px 14px rgba(27,58,107,.35);transition:transform .2s,box-shadow .2s;}
+.kpi-card-hero:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(27,58,107,.45);}
+.kpi-card-hero::before{content:'';position:absolute;top:-15px;right:-15px;width:80px;height:80px;background:rgba(255,255,255,.08);border-radius:50%;}
+.kpi-card-hero::after{content:'';position:absolute;bottom:-20px;right:15px;width:55px;height:55px;background:rgba(255,255,255,.05);border-radius:50%;}
+.kpi-card-hero .kpi-val{font-family:var(--font-display);font-size:32px;font-weight:600;color:#fff;line-height:1;margin-bottom:4px;}
+.kpi-card-hero .kpi-lbl{font-size:10px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.08em;}
+.kpi-card-hero .kpi-sub{font-size:10px;color:rgba(255,255,255,.5);margin-top:4px;}
+.kpi-corner-icon{position:absolute;top:0;right:0;width:46px;height:46px;border-radius:0 var(--radius) 0 46px;display:flex;align-items:flex-start;justify-content:flex-end;padding:7px;}
+.indicadores-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;}
+@media(max-width:600px){.indicadores-grid{grid-template-columns:1fr;}}
+.ind-card{background:var(--surface);border-radius:var(--radius);padding:14px;border:1px solid var(--border);position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s;}
+.ind-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);}
+.ind-card .ind-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
+.ind-card .ind-val{font-size:14px;font-weight:600;margin-bottom:2px;}
+.ind-card .ind-sub{font-size:11px;color:var(--text-secondary);margin-bottom:8px;}
+.ind-card .ind-badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:500;}
+.ind-blue .kpi-corner-icon{background:#EBF0FB;}
+.ind-blue .ind-val{color:#2D5FBF;}
+.ind-blue .ind-badge{background:#EBF0FB;color:#2D5FBF;}
+.ind-green .kpi-corner-icon{background:#E8F5EE;}
+.ind-green .ind-val{color:#1A7A45;}
+.ind-green .ind-badge{background:#E8F5EE;color:#1A7A45;}
+.ind-violet .kpi-corner-icon{background:#EEEDFE;}
+.ind-violet .ind-val{color:#534AB7;}
+.ind-violet .ind-badge{background:#EEEDFE;color:#534AB7;}
+.report-col-layout{display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-bottom:14px;}
+@media(max-width:700px){.report-col-layout{grid-template-columns:1fr;}}
+.deleg-bar-row{display:grid;grid-template-columns:90px 1fr 70px 56px 70px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-light,#f0f2f8);}
+.deleg-bar-row:last-child{border-bottom:none;}
+@media(max-width:600px){.deleg-bar-row{grid-template-columns:70px 1fr 56px 44px;}.deleg-bar-row .deleg-cost{display:none;}}
 
 /* ═══════════════════════════════════════════════
    BARRAS DE PROGRESO
@@ -3705,8 +3735,7 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
     bienesConProg.push({b:b,bp:bp,be:be,bc:bc,bej:bej,pct:pct,badge:badge});
     rows+='<tr>'+
       '<td><span class="badge badge-blue" style="font-family:var(--mono)">'+b.codigo+'</span></td>'+
-      '<td>'+b.tipo+'</td><td>'+b.marca+'</td>'+
-      (currentUser.rol==='admin'?'<td>'+(b.delegacion||'\u2014')+'</td>':'')+
+      '<td>'+b.tipo+'</td>'+
       '<td>'+(b.clasificacion?'<span class="badge '+({'Equipo Cr\u00edtico':'badge-red','Alto Valor':'badge-gold','Equipo Sensible':'badge-orange'}[b.clasificacion]||'badge-gray')+'">'+b.clasificacion+'</span>':'\u2014')+'</td>'+
       '<td>'+bp+'</td><td>'+be+'</td>'+
       '<td><span class="badge '+badge+'">'+pct+'%</span></td>'+
@@ -3788,16 +3817,92 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
   // ── Build HTML ──
   var h='';
 
+  // Bien con mayor actividad
+  var bienMasActivo=null;var maxMants=0;
+  bienesConProg.forEach(function(r){if(r.be>maxMants){maxMants=r.be;bienMasActivo=r;}});
+
+  // Mes con mayor ejecución
+  var mesMayorIdx=0;var maxExecMes=0;
+  byMonth.forEach(function(d,i){if(d.exec>maxExecMes){maxExecMes=d.exec;mesMayorIdx=i;}});
+  var mesMayorNom=MONTHS[mesMayorIdx]||chartLabels[mesMayorIdx];
+
+  // Tipo más frecuente
+  var tipoCount={};
+  bienesConProg.forEach(function(r){
+    var progs=progDeUnBien(r.b.id,year);
+    progs.forEach(function(pg){
+      var meses=pg.months||[];
+      if(mesNum!==null) meses=meses.filter(function(m){return m===mesNum;});
+      meses.forEach(function(m){
+        var rec=gr(pg.id,m);
+        if(rec.ejecutado){
+          var t=pg.tipoMant||'—';
+          tipoCount[t]=(tipoCount[t]||0)+1;
+        }
+      });
+    });
+  });
+  var tipoFrecuente='—';var tipoFrecuenteCount=0;
+  Object.keys(tipoCount).forEach(function(t){if(tipoCount[t]>tipoFrecuenteCount){tipoFrecuenteCount=tipoCount[t];tipoFrecuente=t;}});
+
   // ── STAT CARDS (unchanged) ──
   h+='<div class="stats-grid">'+
-    '<div class="kpi-card kpi-blue"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div><div class="kpi-val">'+totalProg+'</div><div class="kpi-lbl">Programados</div></div>'+
-    '<div class="kpi-card kpi-green"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></div><div class="kpi-val">'+totalExec+'</div><div class="kpi-lbl">Ejecutados</div></div>'+
-    '<div class="kpi-card '+(gp>=80?'kpi-violet':gp>=50?'kpi-orange':'kpi-blue')+'"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div><div class="kpi-val">'+gp+'%</div><div class="kpi-lbl">Eficiencia</div></div>'+
-    '<div class="kpi-card kpi-orange"><div class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div><div class="kpi-val">'+(totalProg-totalExec)+'</div><div class="kpi-lbl">Pendientes</div></div>'+
+    '<div class="kpi-card-hero">'+
+      '<div class="kpi-val">'+totalProg+'</div>'+
+      '<div class="kpi-lbl">Programados</div>'+
+      '<div class="kpi-sub">mantenimientos '+year+'</div>'+
+    '</div>'+
+    '<div class="kpi-card kpi-green">'+
+      '<div class="kpi-corner-icon" style="background:#E8F5EE;">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1A7A45" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>'+
+      '</div>'+
+      '<div class="kpi-val">'+totalExec+'</div><div class="kpi-lbl">Ejecutados</div></div>'+
+    '<div class="kpi-card '+(gp>=80?'kpi-violet':gp>=50?'kpi-orange':'kpi-blue')+'">'+
+      '<div class="kpi-corner-icon" style="background:#EEEDFE;">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#534AB7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>'+
+      '</div>'+
+      '<div class="kpi-val">'+gp+'%</div><div class="kpi-lbl">Eficiencia</div></div>'+
+    '<div class="kpi-card kpi-orange">'+
+      '<div class="kpi-corner-icon" style="background:#FEF3E2;">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#B7651A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'+
+      '</div>'+
+      '<div class="kpi-val">'+(totalProg-totalExec)+'</div><div class="kpi-lbl">Pendientes</div></div>'+
+  '</div>';
+
+  h+='<div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;padding-left:2px;margin-top:4px;">Indicadores Destacados</div>'+
+  '<div class="indicadores-grid">'+
+    '<div class="ind-card ind-blue">'+
+      '<div class="kpi-corner-icon ind-blue">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2D5FBF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/></svg>'+
+      '</div>'+
+      '<div class="ind-label">Bien con mayor actividad</div>'+
+      '<div class="ind-val">'+(bienMasActivo?bienMasActivo.b.codigo:'—')+'</div>'+
+      '<div class="ind-sub">'+(bienMasActivo?bienMasActivo.b.tipo+' · '+bienMasActivo.b.marca:'Sin datos')+'</div>'+
+      '<span class="ind-badge ind-blue">'+(bienMasActivo?bienMasActivo.be+' mantenimiento'+(bienMasActivo.be!==1?'s':'')+' ejecutado'+(bienMasActivo.be!==1?'s':''):'—')+'</span>'+
+    '</div>'+
+    '<div class="ind-card ind-green">'+
+      '<div class="kpi-corner-icon ind-green">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1A7A45" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>'+
+      '</div>'+
+      '<div class="ind-label">Mes con mayor ejecución</div>'+
+      '<div class="ind-val">'+(maxExecMes>0?mesMayorNom+' '+year:'Sin datos')+'</div>'+
+      '<div class="ind-sub">'+(maxExecMes>0?'Pico de actividad del período':'No hay ejecuciones aún')+'</div>'+
+      '<span class="ind-badge ind-green">'+(maxExecMes>0?maxExecMes+' mantenimiento'+(maxExecMes!==1?'s':'')+' ejecutado'+(maxExecMes!==1?'s':''):'—')+'</span>'+
+    '</div>'+
+    '<div class="ind-card ind-violet">'+
+      '<div class="kpi-corner-icon ind-violet">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#534AB7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>'+
+      '</div>'+
+      '<div class="ind-label">Mantenimiento más frecuente</div>'+
+      '<div class="ind-val">'+tipoFrecuente+'</div>'+
+      '<div class="ind-sub">Tipo predominante del período</div>'+
+      '<span class="ind-badge ind-violet">'+(tipoFrecuenteCount>0?tipoFrecuenteCount+' de '+totalExec+' ejecuciones':'Sin ejecuciones')+'</span>'+
+    '</div>'+
   '</div>';
 
   // ── DONUT + PRESUPUESTO (unchanged) ──
-  h+='<div class="report-grid">'+
+  h+='<div class="report-col-layout">'+
+    '<div style="display:flex;flex-direction:column;gap:12px;">'+
     '<div class="card"><div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> Eficiencia Global '+filtroTag+'</div>'+
       '<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">'+
         '<div class="donut-container">'+donutSVG+
@@ -3818,10 +3923,9 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
       '<div style="margin-top:12px;display:flex;gap:14px;font-size:.78rem;">'+
         '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a9e6e;margin-right:4px;"></span>Ejecutado</span>'+
         '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--border);margin-right:4px;"></span>Pendiente</span></div></div>'+
-  '</div>';
-
-  // ── BLOQUE 1: EJECUCION POR MES — Chart.js full-width ──
-  h+='<div class="card">'+
+    '</div>'+ // cierra columna izquierda
+    '<div>'+ // columna derecha
+    '<div class="card">'+
     '<div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg> Ejecuci\u00f3n por Mes</div>'+
     '<div style="display:flex;gap:12px;margin-bottom:10px;">'+
       '<div style="display:flex;align-items:center;gap:5px;">'+
@@ -3836,15 +3940,17 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
     '<div style="position:relative;height:190px;" id="_rptMesWrap">'+
       '<canvas id="_rptMesCanvas" role="img" aria-label="Gr\u00e1fica de ejecuci\u00f3n por mes '+year+'"></canvas>'+
     '</div>'+
-  '</div>';
+  '</div>'+
+  '</div>'+ // cierra columna derecha
+  '</div>'; // cierra report-col-layout
 
   // ── BLOQUE 3: DETALLE POR BIEN — con scroll interno ──
   h+='<div class="card"><div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg> Detalle por Bien</div>'+
     '<div style="max-height:230px;overflow-y:auto;">'+
       '<table style="width:100%;border-collapse:collapse;"><thead><tr style="position:sticky;top:0;background:var(--surface);z-index:2;">'+
-        '<th>C\u00f3digo</th><th>Tipo</th><th>Marca</th>'+(adminDelegTD?'<th>Delegaci\u00f3n</th>':'')+
+        '<th>C\u00f3digo</th><th>Tipo</th>'+
         '<th>Clasificaci\u00f3n</th><th>Prog.</th><th>Ejec.</th><th>Efic.</th><th>Costo Prog.</th><th>Costo Ejec.</th>'+
-      '</tr></thead><tbody>'+(rows||'<tr><td colspan="'+(adminDelegTD?10:9)+'" style="text-align:center;color:var(--text-secondary);">Sin programaciones para este per\u00edodo</td></tr>')+'</tbody></table>'+
+      '</tr></thead><tbody>'+(rows||'<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);">Sin programaciones para este per\u00edodo</td></tr>')+'</tbody></table>'+
     '</div></div>';
 
   // ── BLOQUE 4: CONCLUSIÓN — alerta + gráfica sin leyenda + 4 métricas ──
@@ -3908,41 +4014,39 @@ function _renderReportUI(year,filtroMes,filtroClasif,filtroRenglon,filtroDepto,m
         '<span style="font-size:.68rem;font-weight:600;padding:2px 7px;border-radius:20px;background:#eef5fd;color:#2e7dce;margin-left:4px;">Solo administrador</span>'+
       '</div>'+
 
-      // SECCIÓN 1: Panorama general — area chart
-      secSep('Panorama general')+
-      '<div style="display:flex;gap:12px;margin-bottom:8px;">'+
-        '<div style="display:flex;align-items:center;gap:5px;">'+
-          '<div style="width:10px;height:10px;background:#1a3a5c;border-radius:2px;"></div>'+
-          '<span style="font-size:10px;color:var(--text-secondary);">Programado</span>'+
-        '</div>'+
-        '<div style="display:flex;align-items:center;gap:5px;">'+
-          '<div style="width:10px;height:10px;background:#1a9e6e;border-radius:2px;"></div>'+
-          '<span style="font-size:10px;color:var(--text-secondary);">Ejecutado</span>'+
-        '</div>'+
-      '</div>'+
-      '<div style="position:relative;height:200px;" id="_rptAreaWrap">'+
-        '<canvas id="_rptAreaCanvas" role="img" aria-label="Panorama por delegaci\u00f3n"></canvas>'+
-      '</div>'+
-
-      // SECCIÓN 2: Tabla detalle
+      // SECCIÓN 1 y 2: nuevo layout con barras
       secSep('Detalle por delegaci\u00f3n')+
-      '<div style="max-height:200px;overflow-y:auto;overflow-x:auto;">'+
-        '<table style="width:100%;border-collapse:collapse;min-width:500px;"><thead><tr style="position:sticky;top:0;background:var(--surface);z-index:2;">'+
-          '<th>Delegaci\u00f3n</th><th>Bienes</th><th>Program.</th><th>Ejecuc.</th>'+
-          '<th class="_rpt_hide_mobile">Costo Prog.</th><th class="_rpt_hide_mobile">Costo Ejec.</th>'+
-          '<th>% Ejec.</th><th>Efic.</th>'+
-        '</tr></thead><tbody>'+
+      '<div style="margin-bottom:8px;">'+
+        '<div style="display:grid;grid-template-columns:90px 1fr 70px 56px 70px;gap:8px;padding:0 0 6px;border-bottom:1px solid var(--border);">'+
+          '<div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Delegación</div>'+
+          '<div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Prog. vs Ejec.</div>'+
+          '<div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;text-align:center;">% Ejec.</div>'+
+          '<div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;text-align:center;">Efic.</div>'+
+          '<div class="deleg-cost" style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;text-align:right;">Costo Ejec.</div>'+
+        '</div>'+
         delegData.map(function(dd){
-          return '<tr>'+
-            '<td style="font-weight:500;">'+dd.d+'</td>'+
-            '<td>'+dd.n+'</td><td>'+dd.dp+'</td><td>'+dd.de+'</td>'+
-            '<td class="_rpt_hide_mobile">Q '+dd.dcp.toLocaleString()+'</td>'+
-            '<td class="_rpt_hide_mobile">Q '+dd.dce.toLocaleString()+'</td>'+
-            '<td>'+pctBadge(dd.pcosto)+'</td>'+
-            '<td>'+pctBadge(dd.pejec)+'</td>'+
-          '</tr>';
+          var maxDP=Math.max.apply(null,delegData.map(function(x){return x.dp;}))||1;
+          return '<div class="deleg-bar-row">'+
+            '<div style="font-size:11px;font-weight:500;color:var(--text);">'+dd.d+'</div>'+
+            '<div>'+
+              '<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px;">'+
+                '<div style="flex:1;background:var(--bg);border-radius:99px;height:7px;overflow:hidden;">'+
+                  '<div style="width:'+Math.min(dd.dp/maxDP*100,100)+'%;height:100%;background:#1B3A6B;border-radius:99px;"></div>'+
+                '</div>'+
+                '<span style="font-size:9px;color:var(--text-muted);width:20px;text-align:right;">'+dd.dp+'</span>'+
+              '</div>'+
+              '<div style="display:flex;align-items:center;gap:4px;">'+
+                '<div style="flex:1;background:var(--bg);border-radius:99px;height:7px;overflow:hidden;">'+
+                  '<div style="width:'+Math.min(dd.de/maxDP*100,100)+'%;height:100%;background:#1A9E6E;border-radius:99px;"></div>'+
+                '</div>'+
+                '<span style="font-size:9px;color:var(--text-muted);width:20px;text-align:right;">'+dd.de+'</span>'+
+              '</div>'+
+            '</div>'+
+            '<div style="text-align:center;">'+pctBadge(dd.pcosto)+'</div>'+
+            '<div style="text-align:center;">'+pctBadge(dd.pejec)+'</div>'+
+            '<div class="deleg-cost" style="text-align:right;font-size:11px;color:var(--text);font-weight:500;">Q '+dd.dce.toLocaleString()+'</div>'+
+          '</div>';
         }).join('')+
-        '</tbody></table>'+
       '</div>'+
 
       // SECCIÓN 3: Top 5
