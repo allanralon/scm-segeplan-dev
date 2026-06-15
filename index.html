@@ -4321,24 +4321,35 @@ function exportarPDF(){
     }
   });
 
-  // Comparativa por delegación
+  // Comparativa por delegación — leer desde delegData (variable en scope de _renderReportUI)
   let delegRows='';
-  if(isAdmin){
-    document.querySelectorAll('#secReport .deleg-bar-row').forEach(function(row){
-      const nombre=row.querySelector('div:first-child')?.textContent?.trim()||'—';
-      const badges=row.querySelectorAll('.badge');
-      const pejec=badges[0]?.textContent?.trim()||'—';
-      const efic=badges[1]?.textContent?.trim()||'—';
-      const costo=row.querySelector('.deleg-cost')?.textContent?.trim()||'—';
+  if(isAdmin && typeof delegData !== 'undefined' && delegData.length>0){
+    delegData.forEach(function(dd){
+      const pcolorBg=dd.pcosto>=80?'#E8F5EE':dd.pcosto>=50?'#FEF3E2':'#FDECEA';
+      const pcolorFg=dd.pcosto>=80?'#1A7A45':dd.pcosto>=50?'#B7651A':'#C0392B';
+      const ecolorBg=dd.pejec>=80?'#E8F5EE':dd.pejec>=50?'#FEF3E2':'#FDECEA';
+      const ecolorFg=dd.pejec>=80?'#1A7A45':dd.pejec>=50?'#B7651A':'#C0392B';
       delegRows+=
         '<tr>'+
-        '<td style="padding:6px 8px;font-size:9.5px;font-weight:500;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+nombre+'</td>'+
-        '<td style="padding:6px 8px;text-align:center;border-bottom:1px solid #F0F2F8;"><span style="background:#FEF3E2;color:#B7651A;padding:2px 7px;border-radius:99px;font-size:8.5px;font-weight:600;">'+pejec+'</span></td>'+
-        '<td style="padding:6px 8px;text-align:center;border-bottom:1px solid #F0F2F8;"><span style="background:#E8F5EE;color:#1A7A45;padding:2px 7px;border-radius:99px;font-size:8.5px;font-weight:600;">'+efic+'</span></td>'+
-        '<td style="padding:6px 8px;text-align:right;color:#1A7A45;font-weight:500;font-size:9.5px;border-bottom:1px solid #F0F2F8;">'+costo+'</td>'+
+        '<td style="padding:6px 8px;font-size:9.5px;font-weight:500;color:#0F1A33;border-bottom:1px solid #F0F2F8;">'+dd.d+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;border-bottom:1px solid #F0F2F8;"><span style="background:'+pcolorBg+';color:'+pcolorFg+';padding:2px 7px;border-radius:99px;font-size:8.5px;font-weight:600;">'+dd.pcosto+'%</span></td>'+
+        '<td style="padding:6px 8px;text-align:center;border-bottom:1px solid #F0F2F8;"><span style="background:'+ecolorBg+';color:'+ecolorFg+';padding:2px 7px;border-radius:99px;font-size:8.5px;font-weight:600;">'+dd.pejec+'%</span></td>'+
+        '<td style="padding:6px 8px;text-align:right;color:#1A7A45;font-weight:500;font-size:9.5px;border-bottom:1px solid #F0F2F8;">Q '+dd.dce.toLocaleString()+'</td>'+
         '</tr>';
     });
   }
+
+  // Capturar gráficas como imagen PNG antes de construir el HTML
+  let eficImgSrc='';
+  let mesImgSrc='';
+  try{
+    const eficCanvas=document.getElementById('_rptEficCanvas');
+    if(eficCanvas) eficImgSrc=eficCanvas.toDataURL('image/png');
+  }catch(e){}
+  try{
+    const mesCanvas=document.getElementById('_rptMesCanvas');
+    if(mesCanvas) mesImgSrc=mesCanvas.toDataURL('image/png');
+  }catch(e){}
 
   const subtituloFiltro='Delegación: '+(filtroDepto||'Todas')+
     (filtroClasif?' · '+filtroClasif:'')+
@@ -4410,6 +4421,20 @@ function exportarPDF(){
         <span style="background:#EEEDFE;color:#534AB7;padding:2px 8px;border-radius:99px;font-size:8px;font-weight:500;">${ind3Badge}</span>
       </div>
     </div>
+
+    ${eficImgSrc||mesImgSrc?`
+    <div style="display:grid;grid-template-columns:${eficImgSrc&&mesImgSrc?'1fr 1.8fr':'1fr'};gap:10px;margin-bottom:12px;">
+      ${eficImgSrc?`
+      <div style="background:#F4F6FA;border-radius:8px;padding:10px;border:1px solid #E2E6EF;">
+        <div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Eficiencia Global</div>
+        <img src="${eficImgSrc}" style="width:100%;height:auto;border-radius:4px;"/>
+      </div>`:''}
+      ${mesImgSrc?`
+      <div style="background:#F4F6FA;border-radius:8px;padding:10px;border:1px solid #E2E6EF;">
+        <div style="font-size:8px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Ejecución por Mes · ${year}</div>
+        <img src="${mesImgSrc}" style="width:100%;height:auto;border-radius:4px;"/>
+      </div>`:''}
+    </div>`:''}
 
     <div style="font-size:9px;font-weight:bold;color:#1B3A6B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">📋 Detalle por Bien</div>
     <table style="width:100%;border-collapse:collapse;font-size:9.5px;margin-bottom:12px;">
